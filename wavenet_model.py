@@ -1,3 +1,5 @@
+import numpy as np
+
 from ops import *
 
 
@@ -56,6 +58,10 @@ class WaveNet:
                                                  shape=[self.batch_size, self.embedding_size],
                                                  name="Negated_Conjecture")
 
+        self.labels = tf.placeholder(dtype="float32",
+                                     shape=[self.batch_size, 1, self.clause_number, 1],
+                                     name="Labels")
+
         combined_clauses = self.combiner_network(self.clause_tensor, self.negated_conjecture, reuse=False)
 
         compared_clauses = self.hierarchical_wavenet(combined_clauses, reuse=False)
@@ -86,7 +92,7 @@ class WaveNet:
                 block_tensor = dropout(block_tensor, self.dropout_p)
             layer_tensor = block_tensor
 
-            for layer_index in xrange(7):
+            for layer_index in xrange(self.layer_number):
                 layer_tensor = wavenet_layer(input_=layer_tensor, kernel_size=self.kernel_size,
                                              dilation_rate=2 ** layer_index,
                                              name="WaveNetLayer" + str(layer_index), reuse=reuse)
@@ -94,8 +100,19 @@ class WaveNet:
         return block_tensor
 
     def compresser_network(self, compared_clauses, reuse=False):
-        return conv1d(compared_clauses, output_dim=1, kernel_size=1, name="CombNet_1x1_1",
+        return conv1d(compared_clauses, output_dim=1, kernel_size=1, name="CompNet_1x1_1",
                       reuse=reuse)
 
     def loss_calculation(self, input_tensor, labels):
         return tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=input_tensor)
+
+    def get_random_clause_tensor(self):
+        return np.zeros(shape=[self.batch_size, 1, self.clause_number, self.embedding_size], dtype=np.float32)
+
+    def get_random_negated_conjecture(self):
+        return np.zeros(shape=[self.batch_size, self.embedding_size], dtype=np.float32)
+
+    def get_random_labels(self):
+        label = np.zeros(shape=[self.batch_size, 1, self.clause_number, 1], dtype="float32")
+        label[:, :, 0, :] = 1
+        return label
