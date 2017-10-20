@@ -76,9 +76,9 @@ class WaveNet:
             negated_conjecture = tf.reshape(negated_conjecture, shape=[self.batch_size, 1, 1, self.embedding_size])
             negated_conjecture = tf.tile(negated_conjecture, multiples=[1, 1, self.clause_number, 1])
 
-            concatenated_clauses = tf.concat([clauses, negated_conjecture], axis=3, name="Clause_Concatenation")
+            concatenated_clauses = concat([clauses, negated_conjecture], axis=3, name="Clause_Concatenation")
             if last_iteration is not None:
-                concatenated_clauses = tf.concat([concatenated_clauses, last_iteration], axis=3, name="Recursive_Concat")
+                concatenated_clauses = concat([concatenated_clauses, last_iteration], axis=3, name="Recursive_Concat")
 
             return conv1d(concatenated_clauses, output_dim=self.channel_size, kernel_size=1, name="CombNet_1x1_1",
                           reuse=reuse)

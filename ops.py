@@ -3,6 +3,8 @@ import os
 import tensorflow as tf
 
 
+IS_OLD_TENSORFLOW = (tf.__version__[0] == '0')
+
 def conv2d(input_, output_dim,
            k_h=3, k_w=3, d_h=1, d_w=1,
            name="conv2d", reuse=False, padding='SAME'):
@@ -163,3 +165,13 @@ def load_model(saver, sess, checkpoint_dir, model_name=None):
         return True
     else:
         return False
+
+
+def concat(values, axis, name):
+    global IS_OLD_TENSORFLOW
+
+    if IS_OLD_TENSORFLOW:
+        concatenated_values = tf.concat(values=values, concat_dim=axis, name=name)
+    else:
+        concatenated_values = tf.concat(values=values, axis=axis, name=name)
+    return concatenated_values
