@@ -19,17 +19,18 @@ def run_model(tf_model, tf_sess, number_of_runs):
     return avg_duration
 
 
-runs = 1
+runs = 10
 number_of_clauses = [64, 128, 256, 512, 1024]
 embedding_sizes = [128, 256, 512, 1024]
 channel_sizes = [128, 256, 512, 1024]
 block_sizes = [1]
 
-TEST_CLAUSES = False
-TEST_EMBEDDING = False
-TEST_CHANNELS = False
-TEST_BLOCKS = False
+TEST_CLAUSES = True
+TEST_EMBEDDING = True
+TEST_CHANNELS = True
+TEST_BLOCKS = True
 VIS_TENSORBOARD = False
+PLOT_RESULTS = False
 LOG_PATH = "/Users/phlippe/Programmierung/model_logs/WaveNet/"
 
 if TEST_CLAUSES:
@@ -42,9 +43,10 @@ if TEST_CLAUSES:
                         channel_size=512)
         sess.run(tf.global_variables_initializer())
         time_results.append(run_model(model, sess, runs))
-
-    plt.plot(number_of_clauses, time_results, color='darkblue', linewidth=3, marker='o')
-    plt.show()
+    print(time_results)
+    if PLOT_RESULTS:
+        plt.plot(number_of_clauses, time_results, color='darkblue', linewidth=3, marker='o')
+        plt.show()
 
 if TEST_EMBEDDING:
     print("Test different embedding sizes...")
@@ -56,9 +58,10 @@ if TEST_EMBEDDING:
                         channel_size=512)
         sess.run(tf.global_variables_initializer())
         time_results.append(run_model(model, sess, runs))
-
-    plt.plot(embedding_sizes, time_results, color='darkblue', linewidth=3, marker='o')
-    plt.show()
+    print(time_results)
+    if PLOT_RESULTS:
+        plt.plot(embedding_sizes, time_results, color='darkblue', linewidth=3, marker='o')
+        plt.show()
 
 if TEST_CHANNELS:
     print("Test different channel sizes...")
@@ -70,9 +73,10 @@ if TEST_CHANNELS:
                         channel_size=ch_size)
         sess.run(tf.global_variables_initializer())
         time_results.append(run_model(model, sess, runs))
-
-    plt.plot(channel_sizes, time_results, color='darkblue', linewidth=3, marker='o')
-    plt.show()
+    print(time_results)
+    if PLOT_RESULTS:
+        plt.plot(channel_sizes, time_results, color='darkblue', linewidth=3, marker='o')
+        plt.show()
 
 if TEST_BLOCKS:
     print("Test different block sizes...")
@@ -84,9 +88,10 @@ if TEST_BLOCKS:
                         channel_size=256)
         sess.run(tf.global_variables_initializer())
         time_results.append(run_model(model, sess, runs))
-
-    plt.plot(block_sizes, time_results, color='darkblue', linewidth=3, marker='o')
-    plt.show()
+    print(time_results)
+    if PLOT_RESULTS:
+        plt.plot(block_sizes, time_results, color='darkblue', linewidth=3, marker='o')
+        plt.show()
 
 if VIS_TENSORBOARD:
     print("Create summary graph for Tensorboard...")
