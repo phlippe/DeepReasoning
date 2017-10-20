@@ -82,7 +82,8 @@ class WaveNet:
                       reuse=reuse)
 
     def hierarchical_wavenet(self, input_tensor, reuse=False):
-        for block_index in xrange(self.block_number):
+        block_tensor = None
+        for block_index in range(self.block_number):
             """
             B(x) = x + (L_{64} * L_{32} * ... * L_{1})(D_{f}(x,p))
             """
@@ -92,7 +93,7 @@ class WaveNet:
                 block_tensor = dropout(block_tensor, self.dropout_p)
             layer_tensor = block_tensor
 
-            for layer_index in xrange(self.layer_number):
+            for layer_index in range(self.layer_number):
                 layer_tensor = wavenet_layer(input_=layer_tensor, kernel_size=self.kernel_size,
                                              dilation_rate=2 ** layer_index,
                                              name="WaveNetLayer" + str(layer_index), reuse=reuse)
