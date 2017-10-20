@@ -29,7 +29,8 @@ TEST_CLAUSES = False
 TEST_EMBEDDING = False
 TEST_CHANNELS = False
 TEST_BLOCKS = False
-VIS_TENSORBOARD = True
+VIS_TENSORBOARD = False
+LOG_PATH = "/Users/phlippe/Programmierung/model_logs/WaveNet/"
 
 if TEST_CLAUSES:
     print("Test different clause numbers...")
@@ -83,7 +84,6 @@ if TEST_BLOCKS:
                         channel_size=256)
         sess.run(tf.global_variables_initializer())
         time_results.append(run_model(model, sess, runs))
-        writer = tf.summary.FileWriter("/Users/phlippe/Programmierung/model_logs/WaveNet/", graph=sess.graph)
 
     plt.plot(block_sizes, time_results, color='darkblue', linewidth=3, marker='o')
     plt.show()
@@ -95,4 +95,4 @@ if VIS_TENSORBOARD:
     model = WaveNet(layer_number=7, clause_number=128, embedding_size=512, block_number=3,
                     channel_size=256)
     sess.run(tf.global_variables_initializer())
-    writer = tf.summary.FileWriter("/Users/phlippe/Programmierung/model_logs/WaveNet/", graph=sess.graph)
+    writer = tf.summary.FileWriter(logdir=LOG_PATH, graph=sess.graph)
