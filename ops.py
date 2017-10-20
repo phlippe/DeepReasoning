@@ -117,16 +117,17 @@ def wavenet_layer(input_, kernel_size=3, dilation_rate=1, name="WaveNet_Layer", 
     :param reuse: If variables should be reused or not
     :return: Output of the combined layer with shape B1WC (B - Batch, W - Width, C - Channels) as input
     """
-    input_shape = input_.get_shape()
-    channel_size = input_shape[-1]
-    filter_layer = tf.nn.tanh(
-        dilated_conv1d(input_=input_, output_dim=channel_size, k_w=kernel_size, dilation_rate=dilation_rate,
-                       name=name + "_filter", reuse=reuse))
-    gate_layer = tf.nn.sigmoid(
-        dilated_conv1d(input_=input_, output_dim=channel_size, k_w=kernel_size, dilation_rate=dilation_rate,
-                       name=name + "_gate", reuse=reuse))
-    layer_d = filter_layer * gate_layer + input_
-    return layer_d
+    with tf.variable_scope(name):
+        input_shape = input_.get_shape()
+        channel_size = input_shape[-1]
+        filter_layer = tf.nn.tanh(
+            dilated_conv1d(input_=input_, output_dim=channel_size, k_w=kernel_size, dilation_rate=dilation_rate,
+                           name=name + "_filter", reuse=reuse))
+        gate_layer = tf.nn.sigmoid(
+            dilated_conv1d(input_=input_, output_dim=channel_size, k_w=kernel_size, dilation_rate=dilation_rate,
+                           name=name + "_gate", reuse=reuse))
+        layer_d = filter_layer * gate_layer + input_
+        return layer_d
 
 
 def dropout(input_, p):
