@@ -1,9 +1,11 @@
 from __future__ import print_function
 
-import matplotlib.pyplot as plt
-import tensorflow as tf
 import time
 
+import matplotlib.pyplot as plt
+import tensorflow as tf
+
+from ops import initialize_tf_variables
 from wavenet_model import WaveNet
 
 
@@ -41,7 +43,7 @@ if TEST_CLAUSES:
         sess = tf.Session()
         model = WaveNet(layer_number=7, clause_number=clause_number, embedding_size=512, block_number=1,
                         channel_size=512)
-        sess.run(tf.global_variables_initializer())
+        sess.run(initialize_tf_variables())
         time_results.append(run_model(model, sess, runs))
     print(time_results)
     if PLOT_RESULTS:
@@ -56,7 +58,7 @@ if TEST_EMBEDDING:
         sess = tf.Session()
         model = WaveNet(layer_number=7, clause_number=128, embedding_size=emb_size, block_number=1,
                         channel_size=512)
-        sess.run(tf.global_variables_initializer())
+        sess.run(initialize_tf_variables())
         time_results.append(run_model(model, sess, runs))
     print(time_results)
     if PLOT_RESULTS:
@@ -71,7 +73,7 @@ if TEST_CHANNELS:
         sess = tf.Session()
         model = WaveNet(layer_number=7, clause_number=128, embedding_size=512, block_number=1,
                         channel_size=ch_size)
-        sess.run(tf.global_variables_initializer())
+        sess.run(initialize_tf_variables())
         time_results.append(run_model(model, sess, runs))
     print(time_results)
     if PLOT_RESULTS:
@@ -86,7 +88,7 @@ if TEST_BLOCKS:
         sess = tf.Session()
         model = WaveNet(layer_number=7, clause_number=128, embedding_size=512, block_number=blck_size,
                         channel_size=256)
-        sess.run(tf.global_variables_initializer())
+        sess.run(initialize_tf_variables())
         time_results.append(run_model(model, sess, runs))
     print(time_results)
     if PLOT_RESULTS:
@@ -99,5 +101,5 @@ if VIS_TENSORBOARD:
     sess = tf.Session()
     model = WaveNet(layer_number=7, clause_number=128, embedding_size=512, block_number=3,
                     channel_size=256)
-    sess.run(tf.global_variables_initializer())
+    sess.run(initialize_tf_variables())
     writer = tf.summary.FileWriter(logdir=LOG_PATH, graph=sess.graph)
