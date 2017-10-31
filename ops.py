@@ -1,13 +1,14 @@
 import os
 
 import tensorflow as tf
+from tensorflow.python.framework import graph_util
 
 IS_OLD_TENSORFLOW = (tf.__version__[0] == '0')
 
 
 def conv2d(input_, output_dim,
            k_h=3, k_w=3, d_h=1, d_w=1,
-           name="conv2d", reuse=False, padding='SAME'):
+           name="conv2d", reuse=False, padding='SAME', relu=False):
     """
     Builds up a convolution layer on input including weights and biases.
     :param input_: Input to convolution with shape NHWC
@@ -28,7 +29,11 @@ def conv2d(input_, output_dim,
                                  initializer=tf.constant_initializer(0.0))
         conv = tf.nn.conv2d(input_, w, strides=[1, d_h, d_w, 1], padding=padding)
 
-        conv = tf.reshape(tf.nn.bias_add(conv, biases), conv.get_shape())
+        #conv = tf.reshape(tf.nn.bias_add(conv, biases), conv.get_shape())
+        conv = tf.nn.bias_add(conv, biases)
+
+        if relu:
+            conv = tf.nn.relu(conv)
 
         return conv
 
@@ -62,7 +67,7 @@ def dilated_conv2d(input_, output_dim,
 
 
 def conv1d(input_, output_dim, kernel_size=3, d_h=1, d_w=1,
-           name="conv1d", reuse=False, padding='SAME'):
+           name="conv1d", reuse=False, padding='SAME', relu=False):
     """
     Builds up a one dimensional convolution layer on input including weights and biases.
     :param input_: Input to convolution with shape NHWC
@@ -79,7 +84,7 @@ def conv1d(input_, output_dim, kernel_size=3, d_h=1, d_w=1,
     if len(input_shape) == 3:
         input_ = tf.reshape(input_, shape=(input_shape[0], 1, input_shape[1], input_shape[2]))
     return conv2d(input_=input_, output_dim=output_dim, k_h=1, k_w=kernel_size, d_h=d_h, d_w=d_w,
-                  name=name, reuse=reuse, padding=padding)
+                  name=name, reuse=reuse, padding=padding, relu=relu)
 
 
 def dilated_conv1d(input_, output_dim, k_w=3, dilation_rate=1,
@@ -142,6 +147,21 @@ def dropout(input_, p):
     return tf.nn.dropout(input_, p)
 
 
+def fully_connected(input_, outputs, activation_fn=tf.nn.relu, reuse=False, name="FC_Layer"):
+    """
+    Fully connected layer
+    :param input_:
+    :param outputs:
+    :param activation_fn:
+    :param reuse:
+    :param name:
+    :return:
+    """
+    with tf.variable_scope(name):
+        fc = tf.contrib.layers.fully_connected(input_, outputs, activation_fn, reuse=reuse)
+        return fc
+
+
 def save_model(saver, sess, checkpoint_dir, step, model_name):
     if not os.path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir)
@@ -167,7 +187,51 @@ def load_model(saver, sess, checkpoint_dir, model_name=None):
         return False
 
 
-def concat(values, axis, name):
+def freeze_graph(model_folder, output_node_names):
+    """
+    Freezes a graph that has saved checkpoints in the given folder.
+    :param model_folder:
+    :param output_node_names: Before exporting our graph, we need to precise what is our output node. This is how TF
+                              decides what part of the Graph he has to keep and what part it can dump.
+                              NOTE: this variable is plural, because you can have multiple output nodes
+    :return:
+    """
+    # We retrieve our checkpoint fullpath
+    checkpoint = tf.train.get_checkpoint_state(model_folder)
+    input_checkpoint = checkpoint.model_checkpoint_path
+
+    # We precise the file fullname of our freezed graph
+    absolute_model_folder = "/".join(input_checkpoint.split('/')[:-1])
+    output_graph = absolute_model_folder + "/frozen_model.pb"
+
+    # We clear devices to allow TensorFlow to control on which device it will load operations
+    clear_devices = True
+    print(input_checkpoint)
+    # We import the meta graph and retrieve a Saver
+    saver = tf.train.import_meta_graph(input_checkpoint + '.meta', clear_devices=clear_devices)
+
+    # We retrieve the protobuf graph definition
+    graph = tf.get_default_graph()
+    input_graph_def = graph.as_graph_def()
+
+    # We start a session and restore the graph weights
+    with tf.Session() as sess:
+        saver.restore(sess, input_checkpoint)
+
+        # We use a built-in TF helper to export variables to constants
+        output_graph_def = graph_util.convert_variables_to_constants(
+            sess,  # The session is used to retrieve the weights
+            input_graph_def,  # The graph_def is used to retrieve the nodes
+            output_node_names.split(",")  # The output node names are used to select the usefull nodes
+        )
+
+        # Finally we serialize and dump the output graph to the filesystem
+        with tf.gfile.GFile(output_graph, "wb") as f:
+            f.write(output_graph_def.SerializeToString())
+        print("%d ops in the final graph." % len(output_graph_def.node))
+
+
+def concat(values, axis, name="Concat"):
     global IS_OLD_TENSORFLOW
 
     if IS_OLD_TENSORFLOW:

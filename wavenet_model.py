@@ -71,6 +71,14 @@ class WaveNet:
 
         self.loss = self.loss_calculation(self.final_values, self.labels)
 
+    def embedder_network(self, clause_tensor, reuse=False):
+        with tf.variable_scope("Embedder_Net"):
+            clauses = tf.unstack(value=clause_tensor, axis=2)
+            clauses = concat(clauses, axis=0)
+            clauses = tf.reshape(clauses, shape=[self.batch_size * self.clause_number, 1, self.embedding_size, 1])
+
+            # emb1 = conv1d(input_=clauses, output_dim=1024, )
+
     def combiner_network(self, clauses, negated_conjecture, last_iteration=None, reuse=False):
         with tf.variable_scope("Combiner_Net"):
             negated_conjecture = tf.reshape(negated_conjecture, shape=[self.batch_size, 1, 1, self.embedding_size])
@@ -81,13 +89,13 @@ class WaveNet:
                 concatenated_clauses = concat([concatenated_clauses, last_iteration], axis=3, name="Recursive_Concat")
 
             return conv1d(concatenated_clauses, output_dim=self.channel_size, kernel_size=1, name="CombNet_1x1_1",
-                          reuse=reuse)
+                          reuse=reuse, relu=True)
 
     def hierarchical_wavenet(self, input_tensor, reuse=False):
         with tf.variable_scope("Hierarchical_WaveNet"):
             block_tensor = None
             for block_index in range(self.block_number):
-                with tf.variable_scope("Block_"+str(block_index)):
+                with tf.variable_scope("Block_" + str(block_index)):
                     """
                     B(x) = x + (L_{64} * L_{32} * ... * L_{1})(D_{f}(x,p))
                     """
@@ -107,17 +115,17 @@ class WaveNet:
     def compresser_network(self, compared_clauses, reuse=False):
         with tf.variable_scope("Compresser_Net"):
             return conv1d(compared_clauses, output_dim=1, kernel_size=1, name="CompNet_1x1_1",
-                          reuse=reuse)
+                          reuse=reuse, relu=True)
 
     def loss_calculation(self, input_tensor, labels):
         with tf.variable_scope("Loss"):
             return tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=input_tensor)
 
     def get_random_clause_tensor(self):
-        return np.zeros(shape=[self.batch_size, 1, self.clause_number, self.embedding_size], dtype=np.float32)
+        return np.random.rand(self.batch_size, 1, self.clause_number, self.embedding_size)
 
     def get_random_negated_conjecture(self):
-        return np.zeros(shape=[self.batch_size, self.embedding_size], dtype=np.float32)
+        return np.random.rand(self.batch_size, self.embedding_size)
 
     def get_random_labels(self):
         label = np.zeros(shape=[self.batch_size, 1, self.clause_number, 1], dtype="float32")
