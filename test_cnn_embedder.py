@@ -8,7 +8,7 @@ LOG_PATH = "/Users/phlippe/Programmierung/model_logs/CNNEmbedder/"
 
 print("Build up models...")
 clause_embedder = CNNEmbedder(embedding_size=1024, name="ClauseEmbedder")
-neg_conjecture_embedder = CNNEmbedder(embedding_size=1024, name="NegConjectureEmbedder")
+neg_conjecture_embedder = CNNEmbedder(embedding_size=1024, name="NegConjectureEmbedder", reuse_vocab=True)
 combined_network = CombNetwork(clause_embedder, neg_conjecture_embedder)
 print("Start Session...")
 with tf.Session() as sess:
