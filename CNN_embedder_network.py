@@ -1,6 +1,7 @@
 import numpy as np
 
 from ops import *
+import sys
 
 
 class CNNEmbedder:
@@ -77,6 +78,8 @@ class CNNEmbedder:
     def create_index_vector(self):
         vocabulary = self.get_vocabulary()
         fun_codes = vocabulary.values()
+        if sys.version_info >= (3, 0):
+            fun_codes = list(fun_codes)
         fun_codes_offset = - min(fun_codes)
         fun_codes = [fun_codes[i] + fun_codes_offset for i in range(len(fun_codes))]  # All greater than 0
 
