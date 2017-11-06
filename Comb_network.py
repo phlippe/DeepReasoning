@@ -24,5 +24,3 @@ class CombNetwork:
                                      name="Comb_1024")
             self.weight = fully_connected(layer1, 1, activation_fn=tf.nn.sigmoid, reuse=False, name="Comb_final")
             self.weight = tf.squeeze(self.weight, name="CalcWeights")
-
-
