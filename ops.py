@@ -29,7 +29,7 @@ def conv2d(input_, output_dim,
                                  initializer=tf.constant_initializer(0.0))
         conv = tf.nn.conv2d(input_, w, strides=[1, d_h, d_w, 1], padding=padding)
 
-        #conv = tf.reshape(tf.nn.bias_add(conv, biases), conv.get_shape())
+        # conv = tf.reshape(tf.nn.bias_add(conv, biases), conv.get_shape())
         conv = tf.nn.bias_add(conv, biases)
 
         if relu:
@@ -78,6 +78,7 @@ def conv1d(input_, output_dim, kernel_size=3, d_h=1, d_w=1,
     :param name: Name of layer
     :param reuse: If variables should be reused
     :param padding: Padding of convolution layer
+    :param relu: If activation function "ReLU" should be used or not
     :return: Output of convolution with shape NHWC (channel size = output_dim)
     """
     input_shape = input_.get_shape()
@@ -248,3 +249,12 @@ def initialize_tf_variables():
         return tf.initialize_all_variables()
     else:
         return tf.global_variables_initializer()
+
+
+def create_summary_writer(logpath, sess):
+    global IS_OLD_TENSORFLOW
+
+    if IS_OLD_TENSORFLOW:
+        return tf.train.SummaryWriter(logdir=logpath, graph=sess.graph)
+    else:
+        return tf.summary.FileWriter(logdir=logpath, graph=sess.graph)

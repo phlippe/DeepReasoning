@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 
 from ops import initialize_tf_variables
+from ops import create_summary_writer
 from wavenet_model import WaveNet
 
 
@@ -27,11 +28,11 @@ embedding_sizes = [128, 256, 512, 1024]
 channel_sizes = [128, 256, 512, 1024]
 block_sizes = [1]
 
-TEST_CLAUSES = True
-TEST_EMBEDDING = True
-TEST_CHANNELS = True
-TEST_BLOCKS = True
-VIS_TENSORBOARD = False
+TEST_CLAUSES = False
+TEST_EMBEDDING = False
+TEST_CHANNELS = False
+TEST_BLOCKS = False
+VIS_TENSORBOARD = True
 PLOT_RESULTS = False
 LOG_PATH = "/Users/phlippe/Programmierung/model_logs/WaveNet/"
 
@@ -97,9 +98,19 @@ if TEST_BLOCKS:
 
 if VIS_TENSORBOARD:
     print("Create summary graph for Tensorboard...")
+    run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+    run_metadata = tf.RunMetadata()
     tf.reset_default_graph()
     sess = tf.Session()
     model = WaveNet(layer_number=7, clause_number=128, embedding_size=512, block_number=3,
                     channel_size=256)
     sess.run(initialize_tf_variables())
-    writer = tf.summary.FileWriter(logdir=LOG_PATH, graph=sess.graph)
+
+    writer = create_summary_writer(logpath=LOG_PATH, sess=sess)
+    sess.run([model.loss], feed_dict={model.clause_tensor: model.get_random_clause_tensor(),
+                                      model.negated_conjecture: model.get_random_negated_conjecture(),
+                                      model.labels: model.get_random_labels()},
+             run_metadata=run_metadata,
+             options=run_options)
+    writer.add_run_metadata(run_metadata, 'runtime_performance')
+

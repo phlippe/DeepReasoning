@@ -9,13 +9,18 @@ from Comb_network import CombNetwork
 from ops import *
 
 
-def run_model(tf_model, tf_sess, number_of_runs):
+def run_model(tf_model, tf_sess, number_of_runs, neg_conj=True):
     avg_duration = 0
     for run_index in range(number_of_runs):
         start_time = time.time()
-        out = tf_sess.run([tf_model.weight], feed_dict={
-            tf_model.clause_embedder.input_clause: tf_model.clause_embedder.get_random_clause(),
-            tf_model.neg_conjecture_embedder.input_clause: tf_model.neg_conjecture_embedder.get_random_clause()})
+        if neg_conj:
+            feed_dict = {
+                tf_model.clause_embedder.input_clause: tf_model.clause_embedder.get_random_clause(),
+                tf_model.neg_conjecture_embedder.input_clause: tf_model.neg_conjecture_embedder.get_random_clause()}
+        else:
+            feed_dict = {
+                tf_model.clause_embedder.input_clause: tf_model.clause_embedder.get_random_clause()}
+        out = tf_sess.run([tf_model.weight], feed_dict=feed_dict)
         duration = time.time() - start_time
         avg_duration = avg_duration + duration / number_of_runs
     return avg_duration
@@ -24,10 +29,11 @@ def run_model(tf_model, tf_sess, number_of_runs):
 LOG_PATH = "/Users/phlippe/Programmierung/model_logs/CNNEmbedder/"
 FREEZE_GRAPH = True
 TEST_BATCH_SIZES = False
-TEST_CHANNEL_SIZES = True
-TEST_CHAR_NUMBERS = True
+TEST_CHANNEL_SIZES = False
+TEST_CHAR_NUMBERS = False
+TEST_ONLY_CLAUSE = True
 PLOT_RESULTS = True
-BATCH_STEPS = 8
+BATCH_STEPS = 6
 CHANNEL_SIZES = [128, 256, 512, 1024]
 CHAR_NUMBERS = [20, 30, 40, 50, 75, 100]
 RUNS = 5
@@ -37,7 +43,8 @@ if FREEZE_GRAPH:
     clause_embedder = CNNEmbedder(embedding_size=1024, name="ClauseEmbedder", batch_size=8)
     neg_conjecture_embedder = CNNEmbedder(embedding_size=1024, name="NegConjectureEmbedder", reuse_vocab=True,
                                           batch_size=8)
-    combined_network = CombNetwork(clause_embedder, neg_conjecture_embedder)
+    neg_conjecture_embedder = tf.zeros(shape=[8, 1, 1, 1024], dtype="float")
+    combined_network = CombNetwork(clause_embedder, neg_conjecture_embedder, use_neg_conj=False)
     print("Start Session...")
     with tf.Session() as sess:
         run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
@@ -48,12 +55,13 @@ if FREEZE_GRAPH:
         save_model(saver, sess, checkpoint_dir='CNN_Embedder', model_name='CNN_Embedder', step=1)
         print("Freeze graph...")
         freeze_graph(model_folder='CNN_Embedder', output_node_names='CombNet/CalcWeights')
-        writer = tf.summary.FileWriter(logdir=LOG_PATH, graph=sess.graph)
+
+        writer = create_summary_writer(logpath=LOG_PATH, sess=sess)
         result = sess.run([combined_network.weight],
-                          feed_dict={combined_network.clause_embedder.input_clause: clause_embedder.get_random_clause(),
-                                     combined_network.neg_conjecture_embedder.input_clause: neg_conjecture_embedder.get_random_clause()},
+                          feed_dict={combined_network.clause_embedder.input_clause: clause_embedder.get_random_clause()},
                           run_metadata=run_metadata,
                           options=run_options)
+        # ,combined_network.neg_conjecture_embedder.input_clause: neg_conjecture_embedder.get_random_clause()
         writer.add_run_metadata(run_metadata, 'runtime_performance')
         print("Result = " + str(result))
 
@@ -112,4 +120,30 @@ if TEST_CHAR_NUMBERS:
     print(time_results)
     if PLOT_RESULTS:
         plt.plot(CHAR_NUMBERS, time_results, color='darkblue', linewidth=3, marker='o')
+        plt.show()
+
+if TEST_ONLY_CLAUSE:
+    time_results = []
+    print("Testing only clauses...")
+    tf.reset_default_graph()
+    sess = tf.Session()
+    neg_conjecture_embedder = CNNEmbedder(embedding_size=1024, name="NegConjectureEmbedder", reuse_vocab=False,
+                                          batch_size=1)
+    sess.run(initialize_tf_variables())
+    nce = sess.run([neg_conjecture_embedder.embedded_vector],
+                   feed_dict={neg_conjecture_embedder.input_clause: neg_conjecture_embedder.get_random_clause()})
+
+    for batch_index in range(BATCH_STEPS):
+        batch_size = 2 ** batch_index
+        print("Run model with batch size " + str(batch_size))
+        tf.reset_default_graph()
+        sess = tf.Session()
+        clause_embedder = CNNEmbedder(embedding_size=1024, name="ClauseEmbedder", batch_size=batch_size)
+        combined_network = CombNetwork(clause_embedder, tf.tile(tf.zeros(dtype="float", shape=[1, 1, 1, 1024]),
+                                                                [batch_size, 1, 1, 1]), use_neg_conj=False)
+        sess.run(initialize_tf_variables())
+        time_results.append(run_model(combined_network, sess, RUNS, neg_conj=False))
+    print(time_results)
+    if PLOT_RESULTS:
+        plt.plot([2 ** i for i in range(BATCH_STEPS)], time_results, color='darkblue', linewidth=3, marker='o')
         plt.show()

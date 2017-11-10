@@ -58,8 +58,12 @@ class CNNEmbedder:
                                   name=self.name + "_Conv2", relu=True)
             final_layer = conv1d(input_=second_layer, output_dim=self.embedding_size, kernel_size=self.kernel_size,
                                  name=self.name + "_Conv3", relu=True)
-            self.embedded_vector = tf.reduce_max(input_tensor=final_layer, axis=2, keep_dims=True,
-                                                 name=self.name + "_MaxPool")
+            if IS_OLD_TENSORFLOW:
+                self.embedded_vector = tf.reduce_max(input_tensor=final_layer, reduction_indices=2, keep_dims=True,
+                                                     name=self.name + "_MaxPool")
+            else:
+                self.embedded_vector = tf.reduce_max(input_tensor=final_layer, axis=2, keep_dims=True,
+                                                     name=self.name + "_MaxPool")
 
     def get_random_clause(self):
         random_clause = np.random.randint(0, len(list(self.get_vocabulary().values())),
