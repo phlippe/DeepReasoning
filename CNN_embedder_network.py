@@ -1,17 +1,20 @@
+import sys
+
 import numpy as np
 
 from ops import *
-import sys
 
 
+# TODO: Set instead over batch sizes over height. Might be faster...
 class CNNEmbedder:
     def __init__(self, embedding_size, layer_number=3, channel_size=-1, kernel_size=5, batch_size=1, input_channels=-1,
-                 char_number=50, name="CNNEmbedder", reuse_vocab=False):
+                 char_number=50, name="CNNEmbedder", reuse_vocab=False, tensor_height=1):
 
         assert layer_number > 0, "Number of layers can not be negative nor 0"
         assert embedding_size > 0, "The embedding size can not be negative nor 0"
         assert kernel_size > 0, "The kernel size can not be negative nor 0"
         assert batch_size > 0, "The batch size can not be negative nor 0"
+        assert tensor_height > 0, "The number of clauses, concatenated over height, must be greater one"
 
         self.layer_number = layer_number
         self.embedding_size = embedding_size
@@ -27,6 +30,7 @@ class CNNEmbedder:
         else:
             self.input_channels = input_channels
         self.char_number = char_number
+        self.tensor_height = tensor_height
 
         self.vocab_table = None
         self.vocab_index_tensor = None
@@ -38,19 +42,24 @@ class CNNEmbedder:
 
     def forward(self):
         with tf.variable_scope(self.name):
-            # self.input_clause = tf.placeholder(dtype="float32", shape=[self.batch_size, 1, None, self.input_channels],
-            #                                    name="InputClause")
-            self.input_clause = tf.placeholder(dtype="int32", shape=[self.batch_size, self.char_number], name="InputClause")
+            self.input_clause = tf.placeholder(dtype="int32",
+                                               shape=[self.batch_size * self.tensor_height, self.char_number],
+                                               name="InputClause")
             all_vocabs = tf.reshape(tensor=self.input_clause, shape=[-1])
             vocab_indices = tf.gather(self.vocab_index_tensor, all_vocabs + self.vocab_offset)
             embedded_vocabs = tf.nn.embedding_lookup(params=self.vocab_table, ids=vocab_indices, name="Vocab_Lookup")
             if IS_OLD_TENSORFLOW:
-                input_tensor = tf.pack(values=tf.split(value=embedded_vocabs, num_split=self.batch_size, split_dim=0),
-                                       axis=0)
+                input_tensor = tf.pack(
+                    values=tf.split(value=embedded_vocabs, num_split=self.batch_size * self.tensor_height, split_dim=0),
+                    axis=0)
             else:
-                input_tensor = tf.stack(values=tf.split(value=embedded_vocabs, num_or_size_splits=self.batch_size, axis=0),
-                                        axis=0)
-            input_tensor = tf.reshape(tensor=input_tensor, shape=[self.batch_size, 1, -1, self.channel_size])
+                input_tensor = tf.stack(
+                    values=tf.split(value=embedded_vocabs, num_or_size_splits=self.batch_size * self.tensor_height,
+                                    axis=0),
+                    axis=0)
+            # TODO: Check which input clause is where after reshaping
+            input_tensor = tf.reshape(tensor=input_tensor,
+                                      shape=[self.batch_size, self.tensor_height, -1, self.channel_size])
 
             first_layer = conv1d(input_=input_tensor, output_dim=self.channel_size, kernel_size=self.kernel_size,
                                  name=self.name + "_Conv1", relu=True)
@@ -58,6 +67,7 @@ class CNNEmbedder:
                                   name=self.name + "_Conv2", relu=True)
             final_layer = conv1d(input_=second_layer, output_dim=self.embedding_size, kernel_size=self.kernel_size,
                                  name=self.name + "_Conv3", relu=True)
+
             if IS_OLD_TENSORFLOW:
                 self.embedded_vector = tf.reduce_max(input_tensor=final_layer, reduction_indices=2, keep_dims=True,
                                                      name=self.name + "_MaxPool")
@@ -67,7 +77,7 @@ class CNNEmbedder:
 
     def get_random_clause(self):
         random_clause = np.random.randint(0, len(list(self.get_vocabulary().values())),
-                                          [self.batch_size, self.char_number]) #np.random.randint(5, 100)
+                                          [self.batch_size*self.tensor_height, self.char_number])
         for i in range(random_clause.shape[0]):
             for j in range(random_clause.shape[1]):
                 random_clause[i, j] = list(self.get_vocabulary().values())[random_clause[i, j]]

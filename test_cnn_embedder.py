@@ -35,20 +35,21 @@ TEST_BATCH_SIZES = False
 TEST_CHANNEL_SIZES = False
 TEST_CHAR_NUMBERS = False
 TEST_ONLY_CLAUSE = False
+TEST_TENSOR_HEIGHT = True
 PLOT_RESULTS = True
-BATCH_STEPS = 6
+BATCH_STEPS = 4
 CHANNEL_SIZES = [128, 256, 512, 1024]
 CHAR_NUMBERS = [20, 30, 40, 50, 75, 100]
+TENSOR_HEIGHT_STEPS = BATCH_STEPS
 RUNS = 5
-
-
 
 if FREEZE_GRAPH or RUN_METADATA:
     print("Build up models...")
-    clause_embedder = CNNEmbedder(embedding_size=1024, name="ClauseEmbedder", batch_size=8)
+    tensor_height = 8
+    clause_embedder = CNNEmbedder(embedding_size=1024, name="ClauseEmbedder", batch_size=8, tensor_height=tensor_height)
     neg_conjecture_embedder = CNNEmbedder(embedding_size=1024, name="NegConjectureEmbedder", reuse_vocab=True,
-                                          batch_size=8)
-    neg_conjecture_embedder = tf.zeros(shape=[8, 1, 1, 1024], dtype="float")
+                                          batch_size=8, tensor_height=tensor_height)
+    neg_conjecture_embedder = tf.zeros(shape=[8, tensor_height, 1, 1024], dtype="float")
     combined_network = CombNetwork(clause_embedder, neg_conjecture_embedder, use_neg_conj=False)
     print("Start Session...")
     with tf.Session() as sess:
@@ -150,6 +151,32 @@ if TEST_ONLY_CLAUSE:
 
         clause_embedder = CNNEmbedder(embedding_size=emb_size, name="ClauseEmbedder", batch_size=batch_size)
         combined_network = CombNetwork(clause_embedder, tf.zeros(dtype="float", shape=[batch_size, 1, 1, emb_size]),
+                                       use_neg_conj=False)
+        sess.run(initialize_tf_variables())
+        time_results.append(run_model(combined_network, sess, RUNS, neg_conj=False))
+    print(time_results)
+    if PLOT_RESULTS:
+        plt.plot([2 ** i for i in range(BATCH_STEPS)], time_results, color='darkblue', linewidth=3, marker='o')
+        plt.show()
+
+if TEST_TENSOR_HEIGHT:
+    time_results = []
+    emb_size = 1024
+    batch_size = 4
+    print("Testing different tensor heights...")
+    tf.reset_default_graph()
+
+    for height_index in range(TENSOR_HEIGHT_STEPS):
+        tensor_height = 2 ** height_index
+        print("Run model with tensor height " + str(tensor_height) + ", batch size " +
+              str(batch_size) + " and embedding size " + str(emb_size))
+        tf.reset_default_graph()
+        sess = tf.Session()
+
+        clause_embedder = CNNEmbedder(embedding_size=emb_size, name="ClauseEmbedder", batch_size=batch_size,
+                                      tensor_height=tensor_height)
+        combined_network = CombNetwork(clause_embedder,
+                                       tf.zeros(dtype="float", shape=[batch_size, tensor_height, 1, emb_size]),
                                        use_neg_conj=False)
         sess.run(initialize_tf_variables())
         time_results.append(run_model(combined_network, sess, RUNS, neg_conj=False))

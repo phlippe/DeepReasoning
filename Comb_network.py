@@ -13,6 +13,7 @@ class CombNetwork:
         self.comb_features = comb_features
         self.name = name
         self.useNegConj = use_neg_conj
+        self.tensor_height = clause_embedder.tensor_height
         self.weight = None
         self.forward()
 
@@ -29,3 +30,5 @@ class CombNetwork:
                                      name="Comb_1024")
             self.weight = fully_connected(layer1, 1, activation_fn=tf.nn.sigmoid, reuse=False, name="Comb_final")
             self.weight = tf.squeeze(self.weight, name="CalcWeights")
+            if self.tensor_height != 1:
+                self.weight = tf.reshape(tensor=self.weight, shape=[-1], name="ReshapeTo1D")

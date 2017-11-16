@@ -159,7 +159,9 @@ def fully_connected(input_, outputs, activation_fn=tf.nn.relu, reuse=False, name
     :return:
     """
     with tf.variable_scope(name):
-        fc = tf.contrib.layers.fully_connected(input_, outputs, activation_fn, reuse=reuse)
+        # Earlier: fc = tf.contrib.layers.fully_connected(input_, outputs, activation_fn, reuse=reuse)
+        # Now using 1x1 convolution for possible height dimension
+        fc = activation_fn(conv1d(input_=input_, output_dim=outputs, kernel_size=1, relu=False, name=name))
         return fc
 
 
