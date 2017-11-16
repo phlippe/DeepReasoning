@@ -18,5 +18,5 @@ probability with that the clause will help to prove the conjecture.
 
 ## Comparison networks
 ### WaveNet
-The WaveNet model is structured as follows: ![alt text](graphics/WaveNetModel.pdf)
+The WaveNet model is structured as follows: ![alt text](graphics/WaveNetModel.png)
 
