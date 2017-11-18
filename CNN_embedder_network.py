@@ -83,8 +83,12 @@ class CNNEmbedder:
                     self.embedded_vector.append(
                         tf.reduce_max(input_tensor=single_clauses[c][:, :self.input_length[c], :],
                                       reduction_indices=1, keep_dims=True,
-                                      name=self.name + "_MaxPool_"+str(c)))
+                                      name=self.name + "_MaxPool_" + str(c)))
                 self.embedded_vector = tf.pack(values=self.embedded_vector, axis=0)
+                # TF 0.11 does not support tensor indices with conformed shapes
+                self.embedded_vector = tf.reshape(self.embedded_vector,
+                                                  shape=[self.batch_size, self.tensor_height, 1, self.embedding_size],
+                                                  name="Secure_Reshape")
             else:
                 # self.embedded_vector = tf.reduce_max(input_tensor=final_layer, axis=2, keep_dims=True,
                 #                                      name=self.name + "_MaxPool")
