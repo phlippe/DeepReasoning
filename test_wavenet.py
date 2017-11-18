@@ -12,11 +12,14 @@ from wavenet_model import WaveNet
 
 def run_model(tf_model, tf_sess, number_of_runs):
     avg_duration = 0
+    random_clause = tf_model.get_random_clause_tensor()
+    random_conjecture = tf_model.get_random_negated_conjecture()
+    random_labels = tf_model.get_random_labels()
     for run_index in range(number_of_runs):
         start_time = time.time()
-        out = tf_sess.run([tf_model.loss], feed_dict={tf_model.clause_tensor: tf_model.get_random_clause_tensor(),
-                                                      tf_model.negated_conjecture: tf_model.get_random_negated_conjecture(),
-                                                      tf_model.labels: tf_model.get_random_labels()})
+        out = tf_sess.run([tf_model.loss], feed_dict={tf_model.clause_tensor: random_clause,
+                                                      tf_model.negated_conjecture: random_conjecture,
+                                                      tf_model.labels: random_labels})
         duration = time.time() - start_time
         avg_duration = avg_duration + duration / runs
     return avg_duration

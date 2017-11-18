@@ -12,13 +12,19 @@ from ops import *
 def run_model(tf_model, tf_sess, number_of_runs, neg_conj=True):
     avg_duration = 0
     random_clause = tf_model.clause_embedder.get_random_clause()
+    random_length = tf_model.clause_embedder.get_random_length()
     if neg_conj:
         feed_dict = {
             tf_model.clause_embedder.input_clause: random_clause,
-            tf_model.neg_conjecture_embedder.input_clause: random_clause}
+            tf_model.neg_conjecture_embedder.input_clause: random_clause,
+            tf_model.clause_embedder.input_length: random_length,
+            tf_model.neg_conjecture_embedder.input_length: random_length
+        }
     else:
         feed_dict = {
-            tf_model.clause_embedder.input_clause: random_clause}
+            tf_model.clause_embedder.input_clause: random_clause,
+            tf_model.clause_embedder.input_length: random_length
+        }
 
     for run_index in range(number_of_runs):
         start_time = time.time()
@@ -37,7 +43,7 @@ TEST_CHANNEL_SIZES = False
 TEST_CHAR_NUMBERS = False
 TEST_ONLY_CLAUSE = False
 TEST_TENSOR_HEIGHT = True
-PLOT_RESULTS = True
+PLOT_RESULTS = False
 BATCH_STEPS = 4
 CHANNEL_SIZES = [128, 256, 512, 1024]
 CHAR_NUMBERS = [20, 30, 40, 50, 75, 100]
@@ -67,7 +73,9 @@ if FREEZE_GRAPH or RUN_METADATA:
             writer = create_summary_writer(logpath=LOG_PATH, sess=sess)
             result = sess.run([combined_network.weight],
                               feed_dict={
-                                  combined_network.clause_embedder.input_clause: clause_embedder.get_random_clause()},
+                                  combined_network.clause_embedder.input_clause: clause_embedder.get_random_clause(),
+                                  combined_network.clause_embedder.input_length: clause_embedder.get_random_length()
+                              },
                               run_metadata=run_metadata,
                               options=run_options)
             # ,combined_network.neg_conjecture_embedder.input_clause: neg_conjecture_embedder.get_random_clause()
@@ -141,7 +149,8 @@ if TEST_ONLY_CLAUSE:
                                           batch_size=1)
     sess.run(initialize_tf_variables())
     nce = sess.run([neg_conjecture_embedder.embedded_vector],
-                   feed_dict={neg_conjecture_embedder.input_clause: neg_conjecture_embedder.get_random_clause()})
+                   feed_dict={neg_conjecture_embedder.input_clause: neg_conjecture_embedder.get_random_clause(),
+                              neg_conjecture_embedder.input_length: neg_conjecture_embedder.get_random_length()})
     sess.close()
 
     for batch_index in range(BATCH_STEPS):
