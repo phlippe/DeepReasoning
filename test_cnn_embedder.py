@@ -11,17 +11,18 @@ from ops import *
 
 def run_model(tf_model, tf_sess, number_of_runs, neg_conj=True):
     avg_duration = 0
+    random_clause = tf_model.clause_embedder.get_random_clause()
+    if neg_conj:
+        feed_dict = {
+            tf_model.clause_embedder.input_clause: random_clause,
+            tf_model.neg_conjecture_embedder.input_clause: random_clause}
+    else:
+        feed_dict = {
+            tf_model.clause_embedder.input_clause: random_clause}
+
     for run_index in range(number_of_runs):
         start_time = time.time()
-        if neg_conj:
-            feed_dict = {
-                tf_model.clause_embedder.input_clause: tf_model.clause_embedder.get_random_clause(),
-                tf_model.neg_conjecture_embedder.input_clause: tf_model.neg_conjecture_embedder.get_random_clause()}
-        else:
-            feed_dict = {
-                tf_model.clause_embedder.input_clause: tf_model.clause_embedder.get_random_clause()}
         out = tf_sess.run([tf_model.weight], feed_dict=feed_dict)
-
         duration = time.time() - start_time
         avg_duration = avg_duration + duration / number_of_runs
     return avg_duration

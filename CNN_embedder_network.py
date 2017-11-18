@@ -37,6 +37,7 @@ class CNNEmbedder:
         self.vocab_offset = None
         self.input_clause = None
         self.embedded_vector = None
+        self.max_fun_code = None
         self.create_lookup_table(reuse_vocab=reuse_vocab)
         self.forward()
 
@@ -77,12 +78,16 @@ class CNNEmbedder:
 
     def get_random_clause(self):
         random_clause = np.random.randint(0, len(list(self.get_vocabulary().values())),
-                                          [self.batch_size*self.tensor_height, self.char_number])
+                                          [self.batch_size * self.tensor_height, self.char_number])
         for i in range(random_clause.shape[0]):
             for j in range(random_clause.shape[1]):
                 random_clause[i, j] = list(self.get_vocabulary().values())[random_clause[i, j]]
 
         return random_clause
+
+    def get_zero_clause(self):
+        zero_clause = np.zeros(shape=[self.batch_size * self.tensor_height, self.char_number], dtype=np.int32)
+        return zero_clause
 
     def create_lookup_table(self, reuse_vocab=False):
         with tf.variable_scope("Vocabulary", reuse=reuse_vocab):
@@ -101,9 +106,10 @@ class CNNEmbedder:
             fun_codes = list(fun_codes)
         fun_codes_offset = - min(fun_codes)
         fun_codes = [fun_codes[i] + fun_codes_offset for i in range(len(fun_codes))]  # All greater than 0
+        self.max_fun_code = max(fun_codes)
 
         index_values = np.zeros([max(fun_codes) + 1],
-                                dtype=np.int32) - 1  # If unknown fun_code is given, -1 raises an error
+                                dtype=np.int32) -1  # If unknown fun_code is given, -1 raises an error
         for i in range(len(fun_codes)):
             index_values[fun_codes[i]] = i
 
