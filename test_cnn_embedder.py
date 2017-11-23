@@ -36,13 +36,13 @@ def run_model(tf_model, tf_sess, number_of_runs, neg_conj=True):
 
 LOG_PATH = "/Users/phlippe/Programmierung/model_logs/CNNEmbedder/"
 # LOG_PATH = "/home/it15133/model_logs/CNNEmbedder/"
-FREEZE_GRAPH = False
-RUN_METADATA = True
+FREEZE_GRAPH = True
+RUN_METADATA = False
 TEST_BATCH_SIZES = False
 TEST_CHANNEL_SIZES = False
 TEST_CHAR_NUMBERS = False
 TEST_ONLY_CLAUSE = False
-TEST_TENSOR_HEIGHT = True
+TEST_TENSOR_HEIGHT = False
 PLOT_RESULTS = False
 BATCH_STEPS = 4
 CHANNEL_SIZES = [128, 256, 512, 1024]
@@ -51,23 +51,48 @@ TENSOR_HEIGHT_STEPS = BATCH_STEPS
 RUNS = 5
 
 if FREEZE_GRAPH or RUN_METADATA:
-    print("Build up models...")
-    tensor_height = 8
-    clause_embedder = CNNEmbedder(embedding_size=1024, name="ClauseEmbedder", batch_size=8, tensor_height=tensor_height)
-    neg_conjecture_embedder = CNNEmbedder(embedding_size=1024, name="NegConjectureEmbedder", reuse_vocab=True,
-                                          batch_size=8, tensor_height=tensor_height)
-    neg_conjecture_embedder = tf.zeros(shape=[8, tensor_height, 1, 1024], dtype="float")
-    combined_network = CombNetwork(clause_embedder, neg_conjecture_embedder, use_neg_conj=False)
-    print("Start Session...")
-    with tf.Session() as sess:
-        sess.run(initialize_tf_variables())
-        if FREEZE_GRAPH:
+    tensor_height = 1
+    batch_size = 64
+    if FREEZE_GRAPH:
+        print("Freeze clause graph...")
+        clause_embedder = CNNEmbedder(embedding_size=1024, name="ClauseEmbedder", batch_size=batch_size,
+                                      tensor_height=tensor_height)
+        neg_conjecture_embedder = tf.placeholder(shape=[1, 1, 1, 1024], dtype="float",
+                                                 name="NegConjectureInput")
+        combined_network = CombNetwork(clause_embedder,
+                                       tf.tile(neg_conjecture_embedder, multiples=[batch_size, 1, 1, 1]),
+                                       use_neg_conj=False)
+        with tf.Session() as sess:
+            sess.run(initialize_tf_variables())
             saver = tf.train.Saver(max_to_keep=4)
             print("Save model...")
-            save_model(saver, sess, checkpoint_dir='CNN_Embedder', model_name='CNN_Embedder', step=1)
+            save_model(saver, sess, checkpoint_dir='CNN_Clause_Embedder', model_name='CNN_Clause_Embedder', step=1)
             print("Freeze graph...")
-            freeze_graph(model_folder='CNN_Embedder', output_node_names='CombNet/CalcWeights')
-        if RUN_METADATA:
+            freeze_graph(model_folder='CNN_Clause_Embedder', output_node_names='CombNet/CalcWeights',
+                         file_name='clause_embedder.pb')
+        tf.reset_default_graph()
+        print("Freeze negated conjecture graph...")
+        neg_conjecture_embedder = CNNEmbedder(embedding_size=1024, name="NegConjectureEmbedder", batch_size=1,
+                                              tensor_height=1)
+        with tf.Session() as sess:
+            sess.run(initialize_tf_variables())
+            saver = tf.train.Saver(max_to_keep=4)
+            print("Save model...")
+            save_model(saver, sess, checkpoint_dir='CNN_Conj_Embedder', model_name='CNN_Conj_Embedder', step=1)
+            print("Freeze graph...")
+            freeze_graph(model_folder='CNN_Conj_Embedder',
+                         output_node_names='NegConjectureEmbedder/channel_max_pool/EmbeddedVector',
+                         file_name='neg_conjecture_embedder.pb')
+        tf.reset_default_graph()
+
+    if RUN_METADATA:
+        print("Run metadata...")
+        clause_embedder = CNNEmbedder(embedding_size=1024, name="ClauseEmbedder", batch_size=64,
+                                      tensor_height=tensor_height)
+        neg_conjecture_embedder = tf.zeros(shape=[64, tensor_height, 1, 1024], dtype="float")
+        combined_network = CombNetwork(clause_embedder, neg_conjecture_embedder, use_neg_conj=False)
+        with tf.Session() as sess:
+            sess.run(initialize_tf_variables())
             run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             run_metadata = tf.RunMetadata()
             writer = create_summary_writer(logpath=LOG_PATH, sess=sess)

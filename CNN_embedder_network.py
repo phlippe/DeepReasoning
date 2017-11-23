@@ -88,7 +88,7 @@ class CNNEmbedder:
                 # TF 0.11 does not support tensor indices with conformed shapes
                 self.embedded_vector = tf.reshape(self.embedded_vector,
                                                   shape=[self.batch_size, self.tensor_height, 1, self.embedding_size],
-                                                  name="Secure_Reshape")
+                                                  name="EmbeddedVector")
             else:
                 # self.embedded_vector = tf.reduce_max(input_tensor=final_layer, axis=2, keep_dims=True,
                 #                                      name=self.name + "_MaxPool")
@@ -99,7 +99,7 @@ class CNNEmbedder:
                         tf.reduce_max(input_tensor=single_clauses[c][:, :self.input_length[c], :],
                                       axis=1, keep_dims=True,
                                       name=self.name + "_MaxPool_" + str(c)))
-                self.embedded_vector = tf.stack(values=self.embedded_vector, axis=0)
+                self.embedded_vector = tf.stack(values=self.embedded_vector, axis=0, name="EmbeddedVector")
 
     def get_random_clause(self):
         random_clause = np.random.randint(0, len(list(self.get_vocabulary().values())),

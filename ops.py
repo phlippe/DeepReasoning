@@ -190,13 +190,14 @@ def load_model(saver, sess, checkpoint_dir, model_name=None):
         return False
 
 
-def freeze_graph(model_folder, output_node_names):
+def freeze_graph(model_folder, output_node_names, file_name="frozen_model.pb"):
     """
     Freezes a graph that has saved checkpoints in the given folder.
     :param model_folder:
     :param output_node_names: Before exporting our graph, we need to precise what is our output node. This is how TF
                               decides what part of the Graph he has to keep and what part it can dump.
                               NOTE: this variable is plural, because you can have multiple output nodes
+    :param file_name:
     :return:
     """
     # We retrieve our checkpoint fullpath
@@ -205,7 +206,7 @@ def freeze_graph(model_folder, output_node_names):
 
     # We precise the file fullname of our freezed graph
     absolute_model_folder = "/".join(input_checkpoint.split('/')[:-1])
-    output_graph = absolute_model_folder + "/frozen_model.pb"
+    output_graph = absolute_model_folder + "/" + file_name
 
     # We clear devices to allow TensorFlow to control on which device it will load operations
     clear_devices = True
