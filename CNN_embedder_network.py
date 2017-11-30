@@ -1,14 +1,13 @@
-import sys
-
 import numpy as np
+import sys
 
 from ops import *
 
 
-# TODO: Set instead over batch sizes over height. Might be faster...
+# TODO: Split embedding in two tensor parts: First type (variable, special character, function - arity)
 class CNNEmbedder:
     def __init__(self, embedding_size, layer_number=3, channel_size=-1, kernel_size=5, batch_size=1, input_channels=-1,
-                 char_number=50, name="CNNEmbedder", reuse_vocab=False, tensor_height=1):
+                 char_number=50, name="CNNEmbedder", reuse_vocab=False, tensor_height=1, use_wavenet=False):
 
         assert layer_number > 0, "Number of layers can not be negative nor 0"
         assert embedding_size > 0, "The embedding size can not be negative nor 0"
@@ -31,6 +30,7 @@ class CNNEmbedder:
             self.input_channels = input_channels
         self.char_number = char_number
         self.tensor_height = tensor_height
+        self.use_wavenet = use_wavenet
 
         self.vocab_table = None
         self.vocab_index_tensor = None
@@ -65,12 +65,20 @@ class CNNEmbedder:
             input_tensor = tf.reshape(tensor=input_tensor,
                                       shape=[self.batch_size, self.tensor_height, -1, self.channel_size])
 
-            first_layer = conv1d(input_=input_tensor, output_dim=self.channel_size, kernel_size=self.kernel_size,
-                                 name=self.name + "_Conv1", relu=True)
-            second_layer = conv1d(input_=first_layer, output_dim=self.channel_size, kernel_size=self.kernel_size,
-                                  name=self.name + "_Conv2", relu=True)
-            final_layer = conv1d(input_=second_layer, output_dim=self.embedding_size, kernel_size=self.kernel_size,
-                                 name=self.name + "_Conv3", relu=True)
+            if not self.use_wavenet:
+                first_layer = conv1d(input_=input_tensor, output_dim=self.channel_size, kernel_size=self.kernel_size,
+                                     name=self.name + "_Conv1", relu=True)
+                second_layer = conv1d(input_=first_layer, output_dim=self.channel_size, kernel_size=self.kernel_size,
+                                      name=self.name + "_Conv2", relu=True)
+                final_layer = conv1d(input_=second_layer, output_dim=self.embedding_size, kernel_size=self.kernel_size,
+                                     name=self.name + "_Conv3", relu=True)
+            else:
+                first_layer = wavenet_layer(input_=input_tensor, kernel_size=self.kernel_size, dilation_rate=1,
+                                            name=self.name + "_Conv1")
+                second_layer = wavenet_layer(input_=first_layer, kernel_size=self.kernel_size, dilation_rate=2,
+                                             name=self.name + "_Conv2")
+                final_layer = wavenet_layer(input_=second_layer, kernel_size=self.kernel_size, dilation_rate=1,
+                                            name=self.name + "_Conv3")
 
             self.channel_max_pool(final_layer)
 
@@ -135,7 +143,7 @@ class CNNEmbedder:
         self.max_fun_code = max(fun_codes)
 
         index_values = np.zeros([max(fun_codes) + 1],
-                                dtype=np.int32) - 1  # If unknown fun_code is given, -1 raises an error
+                                dtype=np.int32)  # -1 If unknown fun_code is given, -1 raises an error
         for i in range(len(fun_codes)):
             index_values[fun_codes[i]] = i
 

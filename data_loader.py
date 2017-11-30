@@ -2,6 +2,12 @@ from collections import OrderedDict
 from random import shuffle
 
 import numpy as np
+import thread
+
+from data_augmenter import DataAugmenter, DefaultAugmenter
+
+LABEL_POSITIVE = 0
+LABEL_NEGATIVE = 1
 
 
 class ProofExampleLoader:
@@ -79,14 +85,20 @@ def get_clause_lengths(conj_list):
 
 
 class ClauseLoader:
-    def __init__(self, file_list, empty_char=0):
+    def __init__(self, file_list, empty_char=0, augment=True, prob_pos=0.3):
+        if augment:
+            self.augmenter = DataAugmenter()
+        else:
+            self.augmenter = DefaultAugmenter()
         self.empty_char = empty_char
+        self.prob_pos = prob_pos
         self.proof_loader = []
         self.proof_pos_indices = []
         self.proof_neg_indices = []
         self.pos_index = 0
         self.neg_index = 0
         self.pos_next = True
+        self.global_batch = None
         for proof_file in file_list:
             self.proof_loader.append(ProofExampleLoader(proof_file))
         for index in range(len(self.proof_loader)):
@@ -97,8 +109,8 @@ class ClauseLoader:
             print("Index " + str(index) + ": positives = " + str(
                 self.proof_loader[index].get_number_of_positives()) + ", negatives = " + str(
                 self.proof_loader[index].get_number_of_negatives()))
-            print(self.proof_loader[index].get_average_clause_length())
-            print(self.proof_loader[index].get_clause_statistic())
+            #print(self.proof_loader[index].get_average_clause_length())
+            #print(self.proof_loader[index].get_clause_statistic())
 
         self.permute_positives()
         self.permute_negatives()
@@ -126,18 +138,30 @@ class ClauseLoader:
         return c
 
     def get_batch(self, batch_size):
+        if self.global_batch is None:
+            self.__get_batch(batch_size=batch_size)
+        current_batch = self.global_batch
+        self.global_batch = None
+        thread.start_new_thread(self.__get_batch, (batch_size,))
+        return current_batch
+
+    def __get_batch(self, batch_size):
+        global LABEL_NEGATIVE, LABEL_POSITIVE
         batch_clauses = []
         batch_neg_conj = []
+        labels = np.zeros(shape=batch_size)
+        pos_next = np.random.choice(a=[0, 1], size=batch_size, p=[1 - self.prob_pos, self.prob_pos])
         for c in range(batch_size):
-            if self.pos_next:
+            if pos_next[c] == 1:
                 proof = self.get_positive()
-                batch_clauses.append(proof.get_positive())
-                batch_neg_conj.append(proof.get_negated_conjecture())
+                batch_clauses.append(self.augmenter.augment_clause(proof.get_positive()))
+                batch_neg_conj.append(self.augmenter.augment_clause(proof.get_negated_conjecture()))
+                labels[c] = LABEL_POSITIVE
             else:
                 proof = self.get_negative()
-                batch_clauses.append(proof.get_negative())
-                batch_neg_conj.append(proof.get_negated_conjecture())
-            self.pos_next = not self.pos_next
+                batch_clauses.append(self.augmenter.augment_clause(proof.get_negative()))
+                batch_neg_conj.append(self.augmenter.augment_clause(proof.get_negated_conjecture()))
+                labels[c] = LABEL_NEGATIVE
         batch_clause_length = get_clause_lengths(batch_clauses)
         batch_neg_conj_length = get_clause_lengths(batch_neg_conj)
         clause_batch = np.zeros(shape=[batch_size, max(batch_clause_length)]) + self.empty_char
@@ -147,10 +171,9 @@ class ClauseLoader:
         for b in range(batch_size):
             clause_batch[b, :batch_clause_length[b]] = np.array(batch_clauses[b])
             neg_conj_batch[b, :batch_neg_conj_length[b]] = np.array(batch_neg_conj[b])
-        return [clause_batch, batch_clause_length, neg_conj_batch, batch_neg_conj_length]
+        self.global_batch = [clause_batch, batch_clause_length, neg_conj_batch, batch_neg_conj_length, labels]
 
-
-a = ClauseLoader(["clause_data/example", "clause_data/example2"])
-print(a.proof_pos_indices)
-print(a.proof_neg_indices)
-print(a.get_batch(128))
+# a = ClauseLoader(["clause_data/example", "clause_data/example2"])
+# print(a.proof_pos_indices)
+# print(a.proof_neg_indices)
+# print(a.get_batch(128))
