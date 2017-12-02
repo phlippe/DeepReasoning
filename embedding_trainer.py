@@ -78,8 +78,8 @@ class EmbeddingTrainer:
                                                                                 optimizer], batch)
                 if training_step % 10 == 0:
                     train_writer.add_summary(sum_str, training_step)
-                print("Iters: [%5d|%5d], time: %4.4f, loss: %.5f, loss ones:%.5f, loss zeros:%.5f" % (
-                    training_step, self.training_iter, time.time() - start_time, loss, loss_ones, loss_zeros))
+                print("Iters: [%5d|%5d], time: %4.4f, clause size: %2d, loss: %.5f, loss ones:%.5f, loss zeros:%.5f" % (
+                    training_step, self.training_iter, time.time() - start_time, np.max(batch[1]), loss, loss_ones, loss_zeros))
 
     def run_model(self, sess, fetches, batch):
         input_clause, input_clause_len, input_conj, input_conj_len, labels = batch
@@ -119,5 +119,5 @@ class EmbeddingTrainer:
 
 
 trainer = EmbeddingTrainer(train_files=["clause_data/example", "clause_data/example2"],
-                           test_files=["clause_data/example"], batch_size=64)
+                           test_files=["clause_data/example"], batch_size=128)
 trainer.run_training()

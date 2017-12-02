@@ -1,5 +1,7 @@
 from collections import OrderedDict
 from random import shuffle
+from glob import glob
+import os
 
 import numpy as np
 import thread
@@ -32,9 +34,13 @@ class ProofExampleLoader:
                 if line:
                     line = [int(i) for i in line]
                     self.neg_examples.append(line)
-        with open(file_prefix + "_conj.txt", "r") as f:
-            for line in f:
-                self.neg_conjecture = [int(i) for i in line.split(",")]
+        try:
+            with open(file_prefix + "_conj.txt", "r") as f:
+                for line in f:
+                    self.neg_conjecture = [int(i) for i in line.split(",")]
+        except IOError as e:
+            print(e)
+            self.neg_conjecture = [0, 0, 0, 0]
 
     def permute_positives(self):
         self.pos_indices = np.random.permutation(len(self.pos_examples))
@@ -70,6 +76,11 @@ class ProofExampleLoader:
     def get_average_clause_length(self):
         pos_length = sum([len(c) for c in self.pos_examples]) / len(self.pos_examples)
         neg_length = sum([len(c) for c in self.neg_examples]) / len(self.neg_examples)
+        return [pos_length, neg_length]
+
+    def get_greatest_clause_length(self):
+        pos_length = max([len(c) for c in self.pos_examples])
+        neg_length = max([len(c) for c in self.neg_examples])
         return [pos_length, neg_length]
 
     def get_clause_statistic(self):
@@ -109,8 +120,8 @@ class ClauseLoader:
             print("Index " + str(index) + ": positives = " + str(
                 self.proof_loader[index].get_number_of_positives()) + ", negatives = " + str(
                 self.proof_loader[index].get_number_of_negatives()))
-            #print(self.proof_loader[index].get_average_clause_length())
-            #print(self.proof_loader[index].get_clause_statistic())
+            # print(self.proof_loader[index].get_average_clause_length())
+            # print(self.proof_loader[index].get_clause_statistic())
 
         self.permute_positives()
         self.permute_negatives()
@@ -173,7 +184,37 @@ class ClauseLoader:
             neg_conj_batch[b, :batch_neg_conj_length[b]] = np.array(batch_neg_conj[b])
         self.global_batch = [clause_batch, batch_clause_length, neg_conj_batch, batch_neg_conj_length, labels]
 
-# a = ClauseLoader(["clause_data/example", "clause_data/example2"])
+    def print_statistic(self):
+        overall_neg = len(self.proof_neg_indices)
+        overall_pos = len(self.proof_pos_indices)
+        avg_pos_len = 0
+        avg_neg_len = 0
+        greatest_pos_len = 0
+        greatest_neg_len = 0
+        for loader in self.proof_loader:
+            curr_avg = loader.get_average_clause_length()
+            avg_pos_len += 1.0 * curr_avg[0] * loader.get_number_of_positives() / overall_pos
+            avg_neg_len += 1.0 * curr_avg[1] * loader.get_number_of_negatives() / overall_neg
+            curr_greatest = loader.get_greatest_clause_length()
+            greatest_pos_len = max(greatest_pos_len, curr_greatest[0])
+            greatest_neg_len = max(greatest_neg_len, curr_greatest[1])
+        print("="*50+"\nSTATISTICS")
+        print("Negative: "+str(overall_neg))
+        print("Average length: "+str(avg_neg_len))
+        print("Greatest: "+str(greatest_neg_len))
+        print("Positive: "+str(overall_pos))
+        print("Average length: "+str(avg_pos_len))
+        print("Greatest: "+str(greatest_pos_len))
+
+    @staticmethod
+    def create_file_list_from_dir(directory):
+        all_files = sorted(glob(directory + "*_neg.txt"))
+        print("Found "+str(len(all_files))+" files in "+directory)
+        return [f.rsplit('_', 1)[0] for f in all_files]
+
+
+a = ClauseLoader(ClauseLoader.create_file_list_from_dir("/home/phillip/datasets/Cluster/Parsed/ClauseWeight"))
+a.print_statistic()
 # print(a.proof_pos_indices)
 # print(a.proof_neg_indices)
 # print(a.get_batch(128))
