@@ -1777,6 +1777,7 @@
 	"esk9_10#10": 818,
 	"esk9_1#1": 477,
 	"esk74_9#9": 817,
+	"esk9_0#0": 2251,
 	"equivalent#2": 670,
 	"equivalence_class#3": 2176,
 	"equivalence_3#0": 751,

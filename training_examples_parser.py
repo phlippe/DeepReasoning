@@ -7,8 +7,8 @@ from CNN_embedder_network import CNNEmbedder
 # ClauseWeight - /home/phillip/datasets/Cluster/*/*/E-Prover_TF_Very_Silent___E---2.0_G----_0003_C18_F1_SE_CS_SP_S0Y/*/*.txt
 # Best - /home/phillip/datasets/Cluster/*/*/E-Prover_TF_Very_Silent___E---2.0_G-E--_208_C18_F1_SE_CS_SP_PS_S0Y/*/*.txt
 
-ALL_FILES = sorted(glob("/home/phillip/datasets/Cluster/Job25255_output/*/E-Prover_TF_Very_Silent___E---2.0_G----_0003_C18_F1_SE_CS_SP_S0Y/*/*.txt"))
-OUTPUT_DIR = "/home/phillip/datasets/Cluster/Parsed/"
+ALL_FILES = sorted(glob("/home/phillip/datasets/Cluster/Job25338_output/*/E-Prover_TF_*___E---2.0_G----_0003_C18_F1_SE_CS_SP_S0Y/*/*.txt"))
+OUTPUT_DIR = "/home/phillip/datasets/Cluster/Training/"
 PREFIX = "ClauseWeight_"
 VOCAB_CODES = CNNEmbedder.get_vocabulary().values()
 if not os.path.exists(OUTPUT_DIR):
@@ -30,7 +30,11 @@ def test_line(line_text):
     if 'Got FunCode out of bounds' in chars[0]:
         print("[!] ERROR: "+line_text)
         return True
-    clause = [int(i) for i in chars]
+    try:
+        clause = [int(i) for i in chars]
+    except ValueError as e:
+        print("[!] ERROR"+e.message)
+        return True
     for fun_code in clause:
         if fun_code not in VOCAB_CODES:
             print("[!] ERROR: Found code that is not in vocabulary: "+str(fun_code)+" (see "+line_text+")")
@@ -45,16 +49,18 @@ for file in ALL_FILES:
     file_name = PREFIX + file.split("/")[-2].split(".")[0]
     output_pos_file = os.path.join(OUTPUT_DIR, file_name+"_pos.txt")
     output_neg_file = os.path.join(OUTPUT_DIR, file_name+"_neg.txt")
+    output_conj_file = os.path.join(OUTPUT_DIR, file_name+"_conj.txt")
     with open(file, 'r') as f:
         f_neg = open(output_neg_file, 'w')
         f_pos = open(output_pos_file, 'w')
+        f_conj = open(output_conj_file, 'w')
         status = FileStatus.PRE_PROCESSING
         for line in f:
             text = line.split('\t')[-1].split('\n')[0]
             # print("Status "+str(status)+", Line "+text)
             if status == FileStatus.POST_PROCESSING:
                 break
-            if status == FileStatus.POSITIVE_EXAMPLES:
+            elif status == FileStatus.POSITIVE_EXAMPLES:
                 if "# Training: Positive examples end" not in text:
                     f_pos.write(text+"\n")
                     if test_line(text):
@@ -80,6 +86,13 @@ for file in ALL_FILES:
                     status = FileStatus.POSITIVE_EXAMPLES
                 elif "# Training: Negative examples begin" in text:
                     status = FileStatus.NEGATIVE_EXAMPLES
+                elif "# Negative Conjecture:" in text or "# Conjecture:" in text:
+                    conjecture = text.split(':')[-1]
+                    f_conj.write(conjecture + "\n")
+                    if test_line(conjecture):
+                        wrong_vocab += 1
+                        status = FileStatus.ERROR
+                        break
                 elif "EOF" in text:
                     print("Found "+text+" while pre-processing")
                     resource_out += 1
@@ -87,8 +100,10 @@ for file in ALL_FILES:
                     break
         f_neg.close()
         f_pos.close()
+        f_conj.close()
         if status == FileStatus.ERROR:
             os.remove(output_pos_file)
             os.remove(output_neg_file)
+            os.remove(output_conj_file)
 print("Found "+str(wrong_vocab)+" files with vocab problems")
 print("Found "+str(resource_out)+" files with resource out")
