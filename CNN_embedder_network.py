@@ -1,5 +1,6 @@
-import numpy as np
 import sys
+
+import numpy as np
 
 from ops import *
 
@@ -33,7 +34,9 @@ class CNNEmbedder:
         self.use_wavenet = use_wavenet
 
         self.vocab_table = None
+        self.arity_table = None
         self.vocab_index_tensor = None
+        self.arity_index_tensor = None
         self.vocab_offset = None
         self.input_clause = None
         self.input_length = None
@@ -49,9 +52,7 @@ class CNNEmbedder:
                                                name="InputClause")
             self.input_length = tf.placeholder(dtype="int32",
                                                shape=[self.batch_size], name="InputClauseLength")
-            all_vocabs = tf.reshape(tensor=self.input_clause, shape=[-1])
-            vocab_indices = tf.gather(self.vocab_index_tensor, all_vocabs + self.vocab_offset)
-            embedded_vocabs = tf.nn.embedding_lookup(params=self.vocab_table, ids=vocab_indices, name="Vocab_Lookup")
+            embedded_vocabs = self.embed_input_clause()
             if IS_OLD_TENSORFLOW:
                 input_tensor = tf.pack(
                     values=tf.split(value=embedded_vocabs, num_split=self.batch_size * self.tensor_height, split_dim=0),
@@ -109,6 +110,14 @@ class CNNEmbedder:
                                       name=self.name + "_MaxPool_" + str(c)))
                 self.embedded_vector = tf.stack(values=self.embedded_vector, axis=0, name="EmbeddedVector")
 
+    def embed_input_clause(self):
+        all_vocabs = tf.reshape(tensor=self.input_clause, shape=[-1])
+        vocab_indices = tf.gather(self.vocab_index_tensor, all_vocabs + self.vocab_offset)
+        arity_indices = tf.gather(self.arity_index_tensor, all_vocabs)
+        embedded_vocabs = tf.nn.embedding_lookup(params=self.vocab_table, ids=vocab_indices, name="Vocab_Lookup")
+        embedded_arities = tf.nn.embedding_lookup(params=self.arity_table, ids=arity_indices, name="Arity_Lookup")
+        return tf.concat([embedded_vocabs, embedded_arities], axis=1)
+
     def get_random_clause(self):
         random_clause = np.random.randint(0, len(list(self.get_vocabulary().values())),
                                           [self.batch_size * self.tensor_height, self.char_number], dtype=np.int32)
@@ -125,21 +134,19 @@ class CNNEmbedder:
 
     def create_lookup_table(self, reuse_vocab=False):
         with tf.variable_scope("Vocabulary", reuse=reuse_vocab):
-            vocabulary = self.get_vocabulary()
-            variable_keys = vocabulary.values()
-            self.vocab_table = tf.get_variable("Vocabs", shape=[len(variable_keys), self.channel_size],
+            vocab_values, keys, vocab_offset = self.get_vocab_values_keys()
+            self.vocab_index_tensor, self.vocab_offset = self.create_index_vector()
+            self.arity_index_tensor, max_arity = self.create_arity_vector()
+
+            self.vocab_table = tf.get_variable("Vocabs", shape=[max(vocab_values) + vocab_offset, self.channel_size / 2],
+                                               dtype=tf.float32,
+                                               initializer=tf.contrib.layers.xavier_initializer())
+            self.arity_table = tf.get_variable("Arities", shape=[max_arity, self.channel_size / 2],
                                                dtype=tf.float32,
                                                initializer=tf.contrib.layers.xavier_initializer())
 
-            self.vocab_index_tensor, self.vocab_offset = self.create_index_vector()
-
     def create_index_vector(self):
-        vocabulary = self.get_vocabulary()
-        fun_codes = vocabulary.values()
-        if sys.version_info >= (3, 0):
-            fun_codes = list(fun_codes)
-        fun_codes_offset = - min(fun_codes)
-        fun_codes = [fun_codes[i] + fun_codes_offset for i in range(len(fun_codes))]  # All greater than 0
+        fun_codes, _, fun_codes_offset = self.get_vocab_values_keys()
         self.max_fun_code = max(fun_codes)
 
         index_values = np.zeros([max(fun_codes) + 1],
@@ -150,6 +157,43 @@ class CNNEmbedder:
         return tf.constant(index_values, dtype=tf.int32, name="Index_Vector"), tf.constant(fun_codes_offset,
                                                                                            dtype=tf.int32,
                                                                                            name="Index_Offset")
+
+    def create_arity_vector(self):
+        values, keys, _ = self.get_vocab_values_keys()
+        arities = [CNNEmbedder.get_arity_from_vocab(x) for x in keys]
+        arities_offset = min(arities)
+        arities = [arities[i] - arities_offset for i in range(len(arities))]
+        vector = np.zeros([max(values) + 1], dtype=np.int32)
+
+        for i in range(len(values)):
+            vector[values[i]] = arities[i]
+
+        return tf.constant(vector, dtype=tf.int32, name="Arity_Index_Vector"), max(arities)
+
+    def get_vocab_values_keys(self):
+        vocabulary = CNNEmbedder.get_vocabulary()
+        values = vocabulary.values()
+        keys = vocabulary.keys()
+        if sys.version_info >= (3, 0):
+            values = list(values)
+            keys = list(keys)
+        values_offset = - min(values)
+        values = [values[i] + values_offset for i in range(len(values))]  # All greater than 0
+        return values, keys, values_offset
+
+    @staticmethod
+    def get_arity_from_vocab(vocab):
+        splitted_vocab = vocab.rsplit('#', 2)
+        if len(splitted_vocab) > 1:
+            return int(splitted_vocab[-1])
+        else:
+            if vocab[0] == 'X':
+                return -1
+            else:
+                if vocab == " ":
+                    return -3
+                else:
+                    return -2
 
     @staticmethod
     def get_vocabulary():

@@ -1,5 +1,6 @@
 import numpy as np
 import time
+import datetime
 
 from CNN_embedder_network import CNNEmbedder
 from Comb_network import CombNetwork
@@ -57,8 +58,10 @@ class EmbeddingTrainer:
 
             self.create_summary()
             summary = tf.summary.merge_all()
-            train_writer = tf.summary.FileWriter(os.path.join(self.summary_dir, "train/"), sess.graph)
-            val_writer = tf.summary.FileWriter(os.path.join(self.summary_dir, "val/"))
+
+            timestamp = str(datetime.datetime.now()).replace("-", "_").replace(" ", "_").split('.')[0]
+            train_writer = tf.summary.FileWriter(os.path.join(self.summary_dir, "train/" + timestamp), sess.graph)
+            val_writer = tf.summary.FileWriter(os.path.join(self.summary_dir, "val/" + timestamp))
 
             # TRAINING LOOP
             for training_step in range(1, self.training_iter):
