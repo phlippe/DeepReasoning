@@ -5,6 +5,7 @@ import os
 
 import numpy as np
 import thread
+import math
 
 from data_augmenter import DataAugmenter, DefaultAugmenter
 
@@ -31,7 +32,7 @@ class ProofExampleLoader:
                         line = [int(i) for i in line]
                         self.pos_examples.append(line)
                     except ValueError as e:
-                        print("[!]ERROR: "+e.message)
+                        print("[!]ERROR POS: "+e.message)
         with open(file_prefix + "_neg.txt", "r") as f:
             for line in f:
                 line = line.split(",")
@@ -40,17 +41,29 @@ class ProofExampleLoader:
                         line = [int(i) for i in line]
                         self.neg_examples.append(line)
                     except ValueError as e:
-                        print("[!]ERROR: "+e.message)
+                        print("[!]ERROR NEG: "+e.message)
         try:
             with open(file_prefix + "_conj.txt", "r") as f:
+                c = 0
+                last_line = ""
                 for line in f:
-                    try:
-                        self.neg_conjecture = [int(i) for i in line.split(",")]
-                    except ValueError:
-                        self.neg_conjecture = []
+                    full_line = line
+                    line = line.split("\n")[0].split(",")
+                    if line and line[0] is not '\n' and not (full_line == last_line):
+                        last_conj = self.neg_conjecture
+                        try:
+                            if c > 0:
+                                self.neg_conjecture.append(2)  # Appending ,
+
+                            self.neg_conjecture = self.neg_conjecture + [int(i) for i in line]
+                            c += 1
+                        except ValueError as e:
+                            print("[!]ERROR CONJ: "+e.message)
+                            self.neg_conjecture = last_conj
+                    last_line = full_line
         except IOError as e:
-            print(e)
-            self.neg_conjecture = []
+            print("[!]ERROR CONJ: "+e.message)
+            self.neg_conjecture = [5, 5, 5]
 
     def permute_positives(self):
         self.pos_indices = np.random.permutation(len(self.pos_examples))
@@ -122,12 +135,17 @@ class ClauseLoader:
         self.global_batch = None
         for proof_file in file_list:
             print(proof_file)
-            self.proof_loader.append(ProofExampleLoader(proof_file))
+            new_proof_loader = ProofExampleLoader(proof_file)
+            if len(new_proof_loader.get_negated_conjecture()) == 0 or (new_proof_loader.get_number_of_negatives() == 0 and new_proof_loader.get_number_of_positives() == 0):
+                print("Could not use this proof loader...")
+            else:
+                self.proof_loader.append(new_proof_loader)
         for index in range(len(self.proof_loader)):
             self.proof_pos_indices = self.proof_pos_indices + [index for _ in range(
-                self.proof_loader[index].get_number_of_positives())]
+                int(math.ceil(math.sqrt(self.proof_loader[index].get_number_of_positives()))))]
+
             self.proof_neg_indices = self.proof_neg_indices + [index for _ in range(
-                self.proof_loader[index].get_number_of_negatives())]
+                int(math.ceil(math.sqrt(self.proof_loader[index].get_number_of_negatives()))))]
             print("Index " + str(index) + ": positives = " + str(
                 self.proof_loader[index].get_number_of_positives()) + ", negatives = " + str(
                 self.proof_loader[index].get_number_of_negatives()) + "( "+self.proof_loader[index].prefix+" )")
@@ -193,6 +211,12 @@ class ClauseLoader:
         for b in range(batch_size):
             clause_batch[b, :batch_clause_length[b]] = np.array(batch_clauses[b])
             neg_conj_batch[b, :batch_neg_conj_length[b]] = np.array(batch_neg_conj[b])
+        if max(batch_clause_length) > 150:
+            clause_batch = clause_batch[:, :150]
+            batch_clause_length = np.minimum(batch_clause_length, 150)
+        if max(batch_neg_conj_length) > 150:
+            neg_conj_batch = neg_conj_batch[:, :150]
+            batch_neg_conj_length = np.minimum(batch_neg_conj_length, 150)
         self.global_batch = [clause_batch, batch_clause_length, neg_conj_batch, batch_neg_conj_length, labels]
 
     def print_statistic(self):
@@ -227,8 +251,8 @@ class ClauseLoader:
         return [f.rsplit('_', 1)[0] for f in all_files]
 
 
-a = ClauseLoader(ClauseLoader.create_file_list_from_dir("/home/phillip/datasets/Cluster/Training/ClauseWeight"))
-a.print_statistic()
+# a = ClauseLoader(ClauseLoader.create_file_list_from_dir("/home/phillip/datasets/Cluster/Training/ClauseWeight"))
+# a.print_statistic()
 # print(a.proof_pos_indices)
 # print(a.proof_neg_indices)
 # print(a.get_batch(128))

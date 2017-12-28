@@ -1,6 +1,8 @@
 import numpy as np
 import time
 import datetime
+from TPTP_train_val_files import get_TPTP_test_files, get_TPTP_train_files, convert_to_absolute_path, \
+    get_TPTP_test_small, get_TPTP_train_small
 
 from CNN_embedder_network import CNNEmbedder
 from Comb_network import CombNetwork
@@ -15,6 +17,8 @@ class EmbeddingTrainer:
 
         self.train_loader = ClauseLoader(file_list=train_files, prob_pos=0.5)
         self.test_loader = ClauseLoader(file_list=test_files, augment=False)
+        self.train_loader.print_statistic()
+        self.test_loader.print_statistic()
 
         self.model = None
 
@@ -66,13 +70,13 @@ class EmbeddingTrainer:
             # TRAINING LOOP
             for training_step in range(1, self.training_iter):
 
-                if training_step % self.val_steps == 0:
-                    print("Validate model...")
-                    val_summary_str = self.run_validation()
-                    val_writer.add_summary(val_summary_str, training_step)
                 if training_step % self.save_steps == 0:
                     print("Save model...")
                     save_model(saver, sess, self.checkpoint_dir, training_step, self.model_name)
+                if training_step % self.val_steps == 0:
+                    print("Validate model...")
+                    val_summary_str = self.run_validation(sess)
+                    val_writer.add_summary(val_summary_str, training_step)
 
                 start_time = time.time()
                 batch = self.train_loader.get_batch(self.batch_size)
@@ -81,8 +85,10 @@ class EmbeddingTrainer:
                                                                                 optimizer], batch)
                 if training_step % 10 == 0:
                     train_writer.add_summary(sum_str, training_step)
-                print("Iters: [%5d|%5d], time: %4.4f, clause size: %2d, loss: %.5f, loss ones:%.5f, loss zeros:%.5f" % (
-                    training_step, self.training_iter, time.time() - start_time, np.max(batch[1]), loss, loss_ones, loss_zeros))
+                print(
+                "Iters: [%5d|%5d], time: %4.4f, clause size: %2d|%2d, loss: %.5f, loss ones:%.5f, loss zeros:%.5f" % (
+                    training_step, self.training_iter, time.time() - start_time, np.max(batch[1]), np.max(batch[3]),
+                    loss, loss_ones, loss_zeros))
 
     def run_model(self, sess, fetches, batch):
         input_clause, input_clause_len, input_conj, input_conj_len, labels = batch
@@ -103,10 +109,10 @@ class EmbeddingTrainer:
                                                                     self.model.loss_zeros], batch)
             avg_loss += np.array([loss_all, loss_ones, loss_zeros])
         avg_loss = avg_loss / self.val_batch_number
-        print("#" * 75)
+        print("#" * 125)
         print("VALIDATION [%d batches] - Overall loss: %.8f, loss ones: %.8f, loss zeros: %.8f" % (
             self.val_batch_number, avg_loss[0], avg_loss[1], avg_loss[2]))
-        print("#" * 75)
+        print("#" * 125)
         val_summary = tf.Summary()
         val_summary.value.add(tag="Test - Overall loss", simple_value=avg_loss[0])
         val_summary.value.add(tag="Test - Loss ones", simple_value=avg_loss[1])
@@ -121,6 +127,9 @@ class EmbeddingTrainer:
         tf.summary.scalar('Lowest prediction', tf.reduce_min(self.model.weight))
 
 
-trainer = EmbeddingTrainer(train_files=["clause_data/example", "clause_data/example2"],
-                           test_files=["clause_data/example"], batch_size=128)
+trainer = EmbeddingTrainer(
+    train_files=convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_",
+                                         get_TPTP_train_files()),
+    test_files=convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_", get_TPTP_test_files()),
+    batch_size=256, val_steps=200, save_steps=200, use_wavenet=False)
 trainer.run_training()
