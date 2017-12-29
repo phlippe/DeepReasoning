@@ -7,8 +7,8 @@ from CNN_embedder_network import CNNEmbedder
 # ClauseWeight - /home/phillip/datasets/Cluster/*/*/E-Prover_TF_Very_Silent___E---2.0_G----_0003_C18_F1_SE_CS_SP_S0Y/*/*.txt
 # Best - /home/phillip/datasets/Cluster/*/*/E-Prover_TF_Very_Silent___E---2.0_G-E--_208_C18_F1_SE_CS_SP_PS_S0Y/*/*.txt
 
-ALL_FILES = sorted(glob("/home/phillip/datasets/Cluster/Job25338_output/*/E-Prover_TF_*___E---2.0_G----_0003_C18_F1_SE_CS_SP_S0Y/*/*.txt"))
-OUTPUT_DIR = "/home/phillip/datasets/Cluster/Training/"
+ALL_FILES = sorted(glob("/home/phillip/datasets/Cluster/Job25658_output/*/E-Prover_TF_*___E---2.0_G----_0003_C18_F1_SE_CS_SP_S0Y/*/*.txt"))
+OUTPUT_DIR = "/home/phillip/datasets/Cluster/InitClauses/"
 PREFIX = "ClauseWeight_"
 VOCAB_CODES = CNNEmbedder.get_vocabulary().values()
 if not os.path.exists(OUTPUT_DIR):
@@ -19,8 +19,9 @@ class FileStatus(Enum):
     PRE_PROCESSING = 0
     POSITIVE_EXAMPLES = 1
     NEGATIVE_EXAMPLES = 2
-    POST_PROCESSING = 3
-    ERROR = 4
+    INIT_CLAUSES = 3
+    POST_PROCESSING = 4
+    ERROR = 5
 
 
 def test_line(line_text):
@@ -50,10 +51,12 @@ for file in ALL_FILES:
     output_pos_file = os.path.join(OUTPUT_DIR, file_name+"_pos.txt")
     output_neg_file = os.path.join(OUTPUT_DIR, file_name+"_neg.txt")
     output_conj_file = os.path.join(OUTPUT_DIR, file_name+"_conj.txt")
+    output_init_file = os.path.join(OUTPUT_DIR, file_name+"_init.txt")
     with open(file, 'r') as f:
         f_neg = open(output_neg_file, 'w')
         f_pos = open(output_pos_file, 'w')
         f_conj = open(output_conj_file, 'w')
+        f_init = open(output_init_file, 'w')
         status = FileStatus.PRE_PROCESSING
         for line in f:
             text = line.split('\t')[-1].split('\n')[0]
@@ -73,7 +76,16 @@ for file in ALL_FILES:
             elif status == FileStatus.NEGATIVE_EXAMPLES:
                 if "# Training: Negative examples end" not in text:
                     f_neg.write(text+"\n")
-                    test_line(text)
+                    if test_line(text):
+                        wrong_vocab += 1
+                        status = FileStatus.ERROR
+                        break
+                else:
+                    status = FileStatus.POST_PROCESSING
+
+            elif status == FileStatus.INIT_CLAUSES:
+                if "# Init clauses end" not in text:
+                    f_init.write(text+"\n")
                     if test_line(text):
                         wrong_vocab += 1
                         status = FileStatus.ERROR
@@ -86,6 +98,8 @@ for file in ALL_FILES:
                     status = FileStatus.POSITIVE_EXAMPLES
                 elif "# Training: Negative examples begin" in text:
                     status = FileStatus.NEGATIVE_EXAMPLES
+                elif "# Init clauses begin" in text:
+                    status = FileStatus.INIT_CLAUSES
                 elif "# Negative Conjecture:" in text or "# Conjecture:" in text:
                     conjecture = text.split(':')[-1]
                     f_conj.write(conjecture + "\n")
@@ -101,9 +115,11 @@ for file in ALL_FILES:
         f_neg.close()
         f_pos.close()
         f_conj.close()
+        f_init.close()
         if status == FileStatus.ERROR:
-            os.remove(output_pos_file)
-            os.remove(output_neg_file)
-            os.remove(output_conj_file)
+            os.remove(output_init_file)
+        os.remove(output_pos_file)
+        os.remove(output_neg_file)
+        os.remove(output_conj_file)
 print("Found "+str(wrong_vocab)+" files with vocab problems")
 print("Found "+str(resource_out)+" files with resource out")

@@ -161,6 +161,10 @@ def fully_connected(input_, outputs, activation_fn=tf.nn.relu, reuse=False, name
     :param name:
     :return:
     """
+    input_shape = input_.get_shape()
+    if len(input_shape) == 2:
+        input_ = tf.reshape(tensor=input_, shape=[input_shape[0], 1, 1, input_shape[1]])
+
     with tf.variable_scope(name):
         # Earlier: fc = tf.contrib.layers.fully_connected(input_, outputs, activation_fn, reuse=reuse)
         # Now using 1x1 convolution for possible height dimension

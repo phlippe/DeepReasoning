@@ -8,7 +8,8 @@ from ops import *
 # TODO: Split embedding in two tensor parts: First type (variable, special character, function - arity)
 class CNNEmbedder:
     def __init__(self, embedding_size, layer_number=3, channel_size=-1, kernel_size=5, batch_size=1, input_channels=-1,
-                 char_number=50, name="CNNEmbedder", reuse_vocab=False, tensor_height=1, use_wavenet=False):
+                 char_number=50, name="CNNEmbedder", reuse_vocab=False, tensor_height=1, use_wavenet=False,
+                 reuse_weights=False):
 
         assert layer_number > 0, "Number of layers can not be negative nor 0"
         assert embedding_size > 0, "The embedding size can not be negative nor 0"
@@ -32,6 +33,7 @@ class CNNEmbedder:
         self.char_number = char_number
         self.tensor_height = tensor_height
         self.use_wavenet = use_wavenet
+        self.reuse_weights = reuse_weights
 
         self.vocab_table = None
         self.arity_table = None
@@ -68,18 +70,18 @@ class CNNEmbedder:
 
             if not self.use_wavenet:
                 first_layer = conv1d(input_=input_tensor, output_dim=self.channel_size, kernel_size=self.kernel_size,
-                                     name=self.name + "_Conv1", relu=True, use_batch_norm=True)
+                                     name=self.name + "_Conv1", relu=True, use_batch_norm=True, reuse=self.reuse_weights)
                 second_layer = conv1d(input_=first_layer, output_dim=self.channel_size, kernel_size=self.kernel_size,
-                                      name=self.name + "_Conv2", relu=True, use_batch_norm=True)
+                                      name=self.name + "_Conv2", relu=True, use_batch_norm=True, reuse=self.reuse_weights)
                 final_layer = conv1d(input_=second_layer, output_dim=self.embedding_size, kernel_size=self.kernel_size,
-                                     name=self.name + "_Conv3", relu=True, use_batch_norm=True)
+                                     name=self.name + "_Conv3", relu=True, use_batch_norm=True, reuse=self.reuse_weights)
             else:
                 first_layer = wavenet_layer(input_=input_tensor, kernel_size=self.kernel_size, dilation_rate=1,
-                                            name=self.name + "_Conv1")
+                                            name=self.name + "_Conv1", reuse=self.reuse_weights)
                 second_layer = wavenet_layer(input_=first_layer, kernel_size=self.kernel_size, dilation_rate=2,
-                                             name=self.name + "_Conv2")
+                                             name=self.name + "_Conv2", reuse=self.reuse_weights)
                 final_layer = wavenet_layer(input_=second_layer, kernel_size=self.kernel_size, dilation_rate=1,
-                                            name=self.name + "_Conv3")
+                                            name=self.name + "_Conv3", reuse=self.reuse_weights)
 
             self.channel_max_pool(final_layer)
 

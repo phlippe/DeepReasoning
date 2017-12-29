@@ -49,7 +49,7 @@ class ProofExampleLoader:
                 for line in f:
                     full_line = line
                     line = line.split("\n")[0].split(",")
-                    if line and line[0] is not '\n' and not (full_line == last_line):
+                    if line and line[0] is not '\n' and not (full_line == last_line) and "6" in line:
                         last_conj = self.neg_conjecture
                         try:
                             if c > 0:
@@ -60,6 +60,8 @@ class ProofExampleLoader:
                         except ValueError as e:
                             print("[!]ERROR CONJ: "+e.message)
                             self.neg_conjecture = last_conj
+                    elif "6" not in line:
+                        print("[!] WARNING: Conjecture line without \"not\" removed: "+str(line))
                     last_line = full_line
         except IOError as e:
             print("[!]ERROR CONJ: "+e.message)
@@ -137,15 +139,17 @@ class ClauseLoader:
             print(proof_file)
             new_proof_loader = ProofExampleLoader(proof_file)
             if len(new_proof_loader.get_negated_conjecture()) == 0 or (new_proof_loader.get_number_of_negatives() == 0 and new_proof_loader.get_number_of_positives() == 0):
-                print("Could not use this proof loader...")
+                print("Could not use this proof loader, no negatives and positives or no conjecture...")
+            elif len(new_proof_loader.get_negated_conjecture()) > 100:
+                print("Too large negated conjecture. Will not be used...")
             else:
                 self.proof_loader.append(new_proof_loader)
         for index in range(len(self.proof_loader)):
             self.proof_pos_indices = self.proof_pos_indices + [index for _ in range(
-                int(math.ceil(math.sqrt(self.proof_loader[index].get_number_of_positives()))))]
+                int(math.ceil(math.sqrt(self.proof_loader[index].get_number_of_positives()))**1.5))]
 
             self.proof_neg_indices = self.proof_neg_indices + [index for _ in range(
-                int(math.ceil(math.sqrt(self.proof_loader[index].get_number_of_negatives()))))]
+                int(math.ceil(math.sqrt(self.proof_loader[index].get_number_of_negatives()))**1.5))]
             print("Index " + str(index) + ": positives = " + str(
                 self.proof_loader[index].get_number_of_positives()) + ", negatives = " + str(
                 self.proof_loader[index].get_number_of_negatives()) + "( "+self.proof_loader[index].prefix+" )")
@@ -220,8 +224,11 @@ class ClauseLoader:
         self.global_batch = [clause_batch, batch_clause_length, neg_conj_batch, batch_neg_conj_length, labels]
 
     def print_statistic(self):
-        overall_neg = len(self.proof_neg_indices)
-        overall_pos = len(self.proof_pos_indices)
+        overall_neg = 0
+        overall_pos = 0
+        for loader in self.proof_loader:
+            overall_neg += loader.get_number_of_negatives()
+            overall_pos += loader.get_number_of_positives()
         avg_pos_len = 0
         avg_neg_len = 0
         greatest_pos_len = 0
