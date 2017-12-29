@@ -8,7 +8,7 @@ IS_OLD_TENSORFLOW = (tf.__version__[0] == '0')
 
 def conv2d(input_, output_dim,
            k_h=3, k_w=3, d_h=1, d_w=1,
-           name="conv2d", reuse=False, padding='SAME', relu=False):
+           name="conv2d", reuse=False, padding='SAME', relu=False, use_batch_norm=False):
     """
     Builds up a convolution layer on input including weights and biases.
     :param input_: Input to convolution with shape NHWC
@@ -34,6 +34,9 @@ def conv2d(input_, output_dim,
 
         if relu:
             conv = tf.nn.relu(conv)
+
+        if use_batch_norm:
+            conv = tf.layers.batch_normalization(conv)
 
         return conv
 
@@ -67,7 +70,7 @@ def dilated_conv2d(input_, output_dim,
 
 
 def conv1d(input_, output_dim, kernel_size=3, d_h=1, d_w=1,
-           name="conv1d", reuse=False, padding='SAME', relu=False):
+           name="conv1d", reuse=False, padding='SAME', relu=False, use_batch_norm=False):
     """
     Builds up a one dimensional convolution layer on input including weights and biases.
     :param input_: Input to convolution with shape NHWC
@@ -85,7 +88,7 @@ def conv1d(input_, output_dim, kernel_size=3, d_h=1, d_w=1,
     if len(input_shape) == 3:
         input_ = tf.reshape(input_, shape=(input_shape[0], 1, input_shape[1], input_shape[2]))
     return conv2d(input_=input_, output_dim=output_dim, k_h=1, k_w=kernel_size, d_h=d_h, d_w=d_w,
-                  name=name, reuse=reuse, padding=padding, relu=relu)
+                  name=name, reuse=reuse, padding=padding, relu=relu, use_batch_norm=use_batch_norm)
 
 
 def dilated_conv1d(input_, output_dim, k_w=3, dilation_rate=1,
@@ -148,7 +151,7 @@ def dropout(input_, p):
     return tf.nn.dropout(input_, p)
 
 
-def fully_connected(input_, outputs, activation_fn=tf.nn.relu, reuse=False, name="FC_Layer"):
+def fully_connected(input_, outputs, activation_fn=tf.nn.relu, reuse=False, name="FC_Layer", use_batch_norm=False):
     """
     Fully connected layer
     :param input_:
@@ -161,7 +164,9 @@ def fully_connected(input_, outputs, activation_fn=tf.nn.relu, reuse=False, name
     with tf.variable_scope(name):
         # Earlier: fc = tf.contrib.layers.fully_connected(input_, outputs, activation_fn, reuse=reuse)
         # Now using 1x1 convolution for possible height dimension
-        fc = activation_fn(conv1d(input_=input_, output_dim=outputs, kernel_size=1, relu=False, name=name))
+        fc = activation_fn(conv1d(input_=input_, output_dim=outputs, kernel_size=1, relu=reuse, name=name, use_batch_norm=False))
+        if use_batch_norm:
+            fc = tf.layers.batch_normalization(fc)
         return fc
 
 

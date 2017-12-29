@@ -68,11 +68,11 @@ class CNNEmbedder:
 
             if not self.use_wavenet:
                 first_layer = conv1d(input_=input_tensor, output_dim=self.channel_size, kernel_size=self.kernel_size,
-                                     name=self.name + "_Conv1", relu=True)
+                                     name=self.name + "_Conv1", relu=True, use_batch_norm=True)
                 second_layer = conv1d(input_=first_layer, output_dim=self.channel_size, kernel_size=self.kernel_size,
-                                      name=self.name + "_Conv2", relu=True)
+                                      name=self.name + "_Conv2", relu=True, use_batch_norm=True)
                 final_layer = conv1d(input_=second_layer, output_dim=self.embedding_size, kernel_size=self.kernel_size,
-                                     name=self.name + "_Conv3", relu=True)
+                                     name=self.name + "_Conv3", relu=True, use_batch_norm=True)
             else:
                 first_layer = wavenet_layer(input_=input_tensor, kernel_size=self.kernel_size, dilation_rate=1,
                                             name=self.name + "_Conv1")

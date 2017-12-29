@@ -35,8 +35,8 @@ class CombNetwork:
                 values=[self.clause_embedder.embedded_vector, neg_embedded], axis=3,
                 name="Concat")
             layer1 = fully_connected(concatenated_features, self.comb_features, activation_fn=tf.nn.relu, reuse=False,
-                                     name="Comb_1024")
-            self.weight = fully_connected(layer1, 1, activation_fn=tf.nn.sigmoid, reuse=False, name="Comb_final")
+                                     name="Comb_1024", use_batch_norm=False)
+            self.weight = fully_connected(layer1, 1, activation_fn=tf.nn.sigmoid, reuse=False, name="Comb_final", use_batch_norm=False)
             self.weight = tf.squeeze(self.weight, name="CalcWeights")
             if self.tensor_height != 1:
                 self.weight = tf.reshape(tensor=self.weight, shape=[-1], name="ReshapeTo1D")

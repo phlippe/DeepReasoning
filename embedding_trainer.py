@@ -13,7 +13,7 @@ from ops import *
 class EmbeddingTrainer:
     def __init__(self, train_files, test_files, batch_size=1024, embedding_size=1024, iterations=100000,
                  val_steps=1000, save_steps=1000, checkpoint_dir='CNN_Embedder', model_name='CNNEmbedder',
-                 summary_dir='logs', val_batch_number=10, lr=0.00001, use_wavenet=False):
+                 summary_dir='logs', val_batch_number=20, lr=0.00001, use_wavenet=False):
 
         self.train_loader = ClauseLoader(file_list=train_files, prob_pos=0.5)
         self.test_loader = ClauseLoader(file_list=test_files, augment=False)
@@ -55,7 +55,7 @@ class EmbeddingTrainer:
 
         with tf.Session() as sess:
             sess.run(initialize_tf_variables())
-            if load_model(saver, sess, self.checkpoint_dir, self.model_name):
+            if False and load_model(saver, sess, self.checkpoint_dir, self.model_name):
                 print(" [*] Load model - SUCCESS")
             else:
                 print(" [!] Load model - failed...")
@@ -131,5 +131,6 @@ trainer = EmbeddingTrainer(
     train_files=convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_",
                                          get_TPTP_train_files()),
     test_files=convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_", get_TPTP_test_files()),
-    batch_size=256, val_steps=200, save_steps=200, use_wavenet=False)
+    checkpoint_dir="CNN_Embedder_BatchNorm",
+    batch_size=256, val_steps=200, save_steps=200, use_wavenet=False, lr=0.00001)
 trainer.run_training()
