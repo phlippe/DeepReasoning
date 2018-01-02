@@ -135,17 +135,19 @@ class EmbeddingTrainer:
 
 
 if __name__ == '__main__':
+    base_path = "/home/phillip/"
     modtr = CombLSTMTrainer(
-        train_files=convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_",
-                                             get_TPTP_train_small()),
-        test_files=convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_",
-                                            get_TPTP_test_small()),
+        train_files=convert_to_absolute_path(base_path+"datasets/Cluster/Training/ClauseWeight_",
+                                             get_TPTP_train_files()),
+        test_files=convert_to_absolute_path(base_path+"datasets/Cluster/Training/ClauseWeight_",
+                                            get_TPTP_test_files()),
         num_proofs=6,
         num_training_clauses=32,
         num_initial_clauses=32,
         num_shuffles=4,
         val_batch_number=20
     )
-    trainer = EmbeddingTrainer(model_trainer=modtr, checkpoint_dir="CNN_LSTM", val_batch_number=20,
-                               batch_size=256, val_steps=200, save_steps=200, lr=0.00001, load_vocab=True)
+    trainer = EmbeddingTrainer(model_trainer=modtr, checkpoint_dir="CNN_LSTM", model_name="CNN_LSTM",
+                               val_batch_number=20, batch_size=256, val_steps=200, save_steps=200, lr=0.00001,
+                               load_vocab=True)
     trainer.run_training()

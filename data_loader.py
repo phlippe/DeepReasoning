@@ -1,14 +1,18 @@
 from collections import OrderedDict
 from random import shuffle
 from glob import glob
-import os
 
+import sys
 import numpy as np
-import thread
 import math
 
 from data_augmenter import DataAugmenter, DefaultAugmenter
 from TPTP_train_val_files import *
+if sys.version_info[0] < '3':
+    pass
+    # from thread import start_new_thread
+else:
+    from _thread import start_new_thread
 
 LABEL_POSITIVE = 0
 LABEL_NEGATIVE = 1
@@ -229,7 +233,7 @@ class ClauseLoader:
             self.__get_batch(batch_size=batch_size)
         current_batch = self.global_batch
         self.global_batch = None
-        thread.start_new_thread(self.__get_batch, (batch_size,))
+        start_new_thread(self.__get_batch, (batch_size,))
         return current_batch
 
     def __get_batch(self, batch_size):

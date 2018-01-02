@@ -25,7 +25,7 @@ class CombLSTMTrainer(ModelTrainer):
         for i in range(self.val_batch_number):
             self.val_batches.append(self.test_loader.get_batch(num_proofs=self.num_proofs,
                                                                num_training_clauses=self.num_training_clauses,
-                                                               num_init_clauses=self.num_initial_clauses))
+                                                               num_init_clauses=self.num_initial_clauses)[:-1])
 
     def create_model(self, batch_size, embedding_size):
         combined_network = CombLSTMNetwork(num_proof=self.num_proofs, num_train_clauses=self.num_training_clauses,
@@ -80,7 +80,7 @@ class CombLSTMTrainer(ModelTrainer):
         loss_max = max(all_proof_losses)
         loss_mean = np.mean(all_proof_losses)
         loss_min = min(all_proof_losses)
-        if loss_max/loss_mean >= 1.0:
+        if loss_max/loss_mean >= 1.3:
             max_index = all_proof_losses.index(loss_max)
             self.train_loader.add_proof_index(self.batch_proofs[max_index])
             print(" [#] INFO: Adding extra index of "+all_files[max_index]+" to train loader")

@@ -5,8 +5,14 @@ from data_augmenter import DataAugmenter, DefaultAugmenter
 import math
 from random import shuffle, randint, seed
 import numpy as np
-import thread
 from TPTP_train_val_files import *
+
+import sys
+if sys.version_info[0] < '3':
+    pass
+    # from thread import start_new_thread
+else:
+    from _thread import start_new_thread
 
 LABEL_POSITIVE = 0
 LABEL_NEGATIVE = 1
@@ -56,7 +62,7 @@ class InitialClauseLoader:
             self.__get_batch(num_proofs, num_training_clauses, num_init_clauses)
         current_batch = self.global_batch
         self.global_batch = None
-        thread.start_new_thread(self.__get_batch, (num_proofs, num_training_clauses, num_init_clauses))
+        start_new_thread(self.__get_batch, (num_proofs, num_training_clauses, num_init_clauses))
         return current_batch
 
     def __get_batch(self, num_proofs, num_training_clauses, num_init_clauses):
