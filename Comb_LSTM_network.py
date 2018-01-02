@@ -76,11 +76,11 @@ class CombLSTMNetwork:
         rep_factor = int(self.num_train_clauses / self.num_shuffles)
         repeated_hidden_states = CombLSTMNetwork.repeat_tensor(tensor_to_repeat=state[0], axis=0, times=rep_factor)
         repeated_current_states = CombLSTMNetwork.repeat_tensor(tensor_to_repeat=state[1], axis=0, times=rep_factor)
-        print("Repeat factor: " + str(rep_factor))
-        print("Hidden states: " + str(state[0].get_shape().as_list()))
-        print("Current states: " + str(state[1].get_shape().as_list()))
-        print("Repeated hidden states: " + str(repeated_hidden_states.get_shape().as_list()))
-        print("Repeated current states: " + str(repeated_current_states.get_shape().as_list()))
+        # print("Repeat factor: " + str(rep_factor))
+        # print("Hidden states: " + str(state[0].get_shape().as_list()))
+        # print("Current states: " + str(state[1].get_shape().as_list()))
+        # print("Repeated hidden states: " + str(repeated_hidden_states.get_shape().as_list()))
+        # print("Repeated current states: " + str(repeated_current_states.get_shape().as_list()))
         return [repeated_hidden_states, repeated_current_states]
 
     def embed_clauses(self):
@@ -123,7 +123,11 @@ class CombLSTMNetwork:
                     for i in range(self.num_proof)]
                     
                 3) Hard coded shuffle -> Best alternative
-                
+                splitted_init_clauses = [
+                    [tf.gather(params=splitted_init_clauses[proof_index],
+                               indices=shuffle_tensor[shuffle_index, self.init_clauses_length[proof_index]-1])
+                     for shuffle_index in range(self.num_shuffles)]
+                    for proof_index in range(self.num_proof)]
                 """
                 splitted_init_clauses = [
                     [tf.gather(params=splitted_init_clauses[proof_index],
@@ -164,8 +168,8 @@ class CombLSTMNetwork:
                 neg_conj_vector = self.repeat_tensor(tensor_to_repeat=self.neg_conj_embedded, times=self.num_shuffles,
                                                      axis=0)
                 neg_conj_vector = tf.tile(neg_conj_vector, multiples=[self.num_init_clauses, 1])
-                print("Clause vector: " + str(clause_vector.get_shape().as_list()))
-                print("Neg Conj vector: " + str(neg_conj_vector.get_shape().as_list()))
+                # print("Clause vector: " + str(clause_vector.get_shape().as_list()))
+                # print("Neg Conj vector: " + str(neg_conj_vector.get_shape().as_list()))
 
             comb_layer = self.first_combination_layer(clause_vector, neg_conj_vector, reuse=False)
 
@@ -192,9 +196,9 @@ class CombLSTMNetwork:
             return [tf.stack(values=chosen_states_h, axis=0), tf.stack(values=chosen_states_c, axis=0)]
 
     def short_state_extraction(self, all_states, state_index):
-        print("All states size: " + str(len([a[state_index] for a in all_states])))
+        # print("All states size: " + str(len([a[state_index] for a in all_states])))
         state_tensor = tf.stack(values=[a[state_index] for a in all_states], axis=0)
-        print("State tensor size: " + str(state_tensor.get_shape().as_list()))
+        # print("State tensor size: " + str(state_tensor.get_shape().as_list()))
         return [state_tensor[self.init_clauses_length[i_proof] - 1, i_proof * self.num_shuffles + i_shuffle, :]
                 for i_proof in range(self.num_proof) for i_shuffle in range(self.num_shuffles)]
 
@@ -231,7 +235,7 @@ class CombLSTMNetwork:
             name = "RepeatTensorAx" + str(axis) + "x" + str(times)
         with tf.name_scope(name):
             input_shape = tensor_to_repeat.get_shape().as_list()
-            print(input_shape)
+            # print(input_shape)
             output_shape = input_shape[:]
             output_shape[axis] *= times
             multiples = [1 for _ in range(len(input_shape))]

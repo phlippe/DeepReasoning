@@ -40,10 +40,8 @@ class InitialClauseLoader:
                 (self.proof_loader[index].get_number_of_positives() +
                  math.sqrt(self.proof_loader[index].get_number_of_negatives())) * 1.0 / index_divider
             )))]
-            print("Created "+str(len(new_indices))+" new indices")
             self.proof_indices = self.proof_indices + new_indices
 
-        print("Created "+str(len(self.proof_indices))+" proof indices")
         seed()  # Initialize random number generator
         self.permute_proofs()
 
