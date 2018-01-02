@@ -8,7 +8,7 @@ import numpy as np
 from TPTP_train_val_files import *
 
 import sys
-if sys.version_info[0] < '3':
+if sys.version_info[0] < 3:
     pass
     # from thread import start_new_thread
 else:
