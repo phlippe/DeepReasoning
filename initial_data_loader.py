@@ -141,8 +141,8 @@ class InitialClauseLoader:
         ClauseLoader.print_loader_statistic(self.proof_loader)
 
     def add_proof_index(self, pindex):
-        insert_index = randint(self.proof_index if self.proof_index < len(self.proof_loader) else 0,
-                               min(self.proof_index+100, len(self.proof_loader)))
+        insert_index = randint(self.proof_index + 32 if self.proof_index + 32 < len(self.proof_loader) else 0,
+                               min(self.proof_index+256, len(self.proof_loader)))
         self.proof_indices.insert(insert_index, pindex)
 
     def remove_proof_index(self, pindex):

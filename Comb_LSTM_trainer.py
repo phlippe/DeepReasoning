@@ -7,7 +7,7 @@ import numpy as np
 
 class CombLSTMTrainer(ModelTrainer):
     def __init__(self, train_files, test_files, num_proofs, num_initial_clauses, num_training_clauses, num_shuffles,
-                 val_batch_number, prob_pos=0.3):
+                 val_batch_number, prob_pos=0.3, loss_filter_size=64):
         self.val_batch_number = val_batch_number
         self.val_batches = []
         self.val_index = 0
@@ -16,6 +16,8 @@ class CombLSTMTrainer(ModelTrainer):
         self.num_training_clauses = num_training_clauses
         self.num_shuffles = num_shuffles
         self.batch_proofs = []
+        self.last_losses = []
+        self.loss_filter_size = loss_filter_size
 
         self.prob_pos = prob_pos
         self.train_loader = InitialClauseLoader(file_list=train_files, prob_pos=self.prob_pos)
@@ -74,17 +76,20 @@ class CombLSTMTrainer(ModelTrainer):
             file_name = self.train_loader.proof_loader[self.batch_proofs[i]].prefix.split("/", -1)[-1].split("_")[-1]
             all_files.append(file_name)
             s += file_name + ": " + str(proof_loss)
-
         print(s)
 
-        loss_max = max(all_proof_losses)
-        loss_mean = np.mean(all_proof_losses)
-        loss_min = min(all_proof_losses)
-        if loss_max/loss_mean >= 1.3:
-            max_index = all_proof_losses.index(loss_max)
-            self.train_loader.add_proof_index(self.batch_proofs[max_index])
-            print(" [#] INFO: Adding extra index of "+all_files[max_index]+" to train loader")
-        if loss_min/loss_mean <= 0.5:
-            min_index = all_proof_losses.index(loss_min)
-            self.train_loader.remove_proof_index(self.batch_proofs[min_index])
-            print(" [#] INFO: Removing a index of "+all_files[min_index]+" from train loader")
+        if len(self.last_losses) > self.loss_filter_size - len(all_proof_losses):
+            needed_spots = len(all_proof_losses) - (self.loss_filter_size - len(self.last_losses))
+            if needed_spots > 0:
+                del self.last_losses[:needed_spots]
+
+        self.last_losses = self.last_losses + all_proof_losses
+        loss_mean = np.mean(self.last_losses)
+
+        for i in range(len(all_proof_losses)):
+            if all_proof_losses[i]/loss_mean >= 1.3:
+                self.train_loader.add_proof_index(self.batch_proofs[i])
+                print(" [#] INFO: Adding extra index of "+all_files[i]+" to train loader")
+            if all_proof_losses[i]/loss_mean <= 0.5:
+                self.train_loader.remove_proof_index(self.batch_proofs[i])
+                print(" [#] INFO: Removing a index of "+all_files[i]+" from train loader")

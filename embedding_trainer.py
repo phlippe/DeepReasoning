@@ -1,9 +1,10 @@
 import numpy as np
 import time
 import datetime
+import argparse
+
 from TPTP_train_val_files import get_TPTP_test_files, get_TPTP_train_files, convert_to_absolute_path, \
     get_TPTP_test_small, get_TPTP_train_small
-
 from CNN_embedder_network import CNNEmbedder
 from Comb_network import CombNetwork
 from data_loader import ClauseLoader
@@ -11,6 +12,7 @@ from CNN_embedder_trainer import CNNEmbedderTrainer
 from Comb_LSTM_trainer import CombLSTMTrainer
 from ops import *
 from model_trainer import ModelTrainer
+
 
 
 class EmbeddingTrainer:
@@ -134,20 +136,38 @@ class EmbeddingTrainer:
         tf.summary.scalar('Lowest prediction', tf.reduce_min(self.model.weight))
 
 
-if __name__ == '__main__':
-    base_path = "/home/phillip/"
+def start_training(args):
     modtr = CombLSTMTrainer(
-        train_files=convert_to_absolute_path(base_path+"datasets/Cluster/Training/ClauseWeight_",
-                                             get_TPTP_train_small()),
-        test_files=convert_to_absolute_path(base_path+"datasets/Cluster/Training/ClauseWeight_",
-                                            get_TPTP_test_small()),
-        num_proofs=6,
-        num_training_clauses=32,
-        num_initial_clauses=32,
-        num_shuffles=4,
+        train_files=convert_to_absolute_path(args.path + "datasets/Cluster/Training/ClauseWeight_",
+                                             get_TPTP_train_files()),
+        test_files=convert_to_absolute_path(args.path + "datasets/Cluster/Training/ClauseWeight_",
+                                            get_TPTP_test_files()),
+        num_proofs=args.num_proofs,
+        num_training_clauses=args.num_training,
+        num_initial_clauses=args.num_init,
+        num_shuffles=args.num_shuffles,
         val_batch_number=20
     )
     trainer = EmbeddingTrainer(model_trainer=modtr, checkpoint_dir="CNN_LSTM", model_name="CNN_LSTM",
-                               val_batch_number=20, batch_size=256, val_steps=200, save_steps=200, lr=0.00001,
-                               load_vocab=True)
+                               val_batch_number=20, batch_size=256, val_steps=args.val_steps,
+                               save_steps=args.save_steps, lr=0.00001, load_vocab=args.load_vocab,
+                               loading_model=args.load_model)
     trainer.run_training()
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Training an embedding network')
+    parser.add_argument('-p', '--path', default="/home/phillip/", help='Base path of datasets')
+    parser.add_argument('-ns', '--num_shuffles', default=4, help='Number of shuffles per proof for LSTM Network')
+    parser.add_argument('-np', '--num_proofs', default=6, help='Number of proofs per batch for LSTM Network')
+    parser.add_argument('-nt', '--num_training', default=32, help='Number of training clauses per proof for LSTM Network')
+    parser.add_argument('-ni', '--num_init', default=32, help='Number of initial clauses per proof for LSTM Network')
+    parser.add_argument('-lr', '--lr', default=0.00001, help='Learning rate of model')
+    parser.add_argument('-vs', '--val_steps', default=200, help='After how many steps the network should be validated')
+    parser.add_argument('-ss', '--save_steps', default=600, help='After how many steps the network should be saved')
+    parser.add_argument('-lv', '--load_vocab', action="store_true", help='If previous vocabulary should be loaded or not')
+    parser.add_argument('-lm', '--load_model', action="store_true", help='If previous model should be loaded or not')
+
+    args = parser.parse_args()
+
+    start_training(args)
