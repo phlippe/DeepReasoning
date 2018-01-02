@@ -1,5 +1,6 @@
 from ops import *
 from CNN_embedder_network import CNNEmbedder
+from random import shuffle
 
 FC_LAYER_1 = "Comb_1024"
 FC_LAYER_2 = "Comb_final"
@@ -100,15 +101,35 @@ class CombLSTMNetwork:
             with tf.name_scope("ShuffleInitClauses"):
                 # Split clauses belonging to different proofs/negated conjectures
                 splitted_init_clauses = tf.split(value=self.init_clauses, num_or_size_splits=self.num_proof, axis=0)
+                # Create randomly shuffled index matrices for all init clause lengths
+                shuffle_list = [CombLSTMNetwork.create_shuffle_tensor(self.num_init_clauses) for _ in
+                                range(self.num_shuffles)]
+                shuffle_tensor = tf.constant(value=shuffle_list, dtype="int32")
                 # Randomly shuffle init clauses. For better generalization do it "self.num_shuffles" times differently.
+                """
+                Options for shuffling:
+                1) tf.random_shuffle -> Problem: no gradients defined
                 splitted_init_clauses = [
-                    #[tf.concat(values=[tf.random_shuffle(value=splitted_init_clauses[i][:self.init_clauses_length[i]]),
-                    #                   splitted_init_clauses[i][self.init_clauses_length[i]:]],
-                    #           axis=0)
-                    # TODO: Look for an alternative way of shuffling (maybe hard coded variants)
+                    [tf.concat(values=[tf.random_shuffle(value=splitted_init_clauses[i][:self.init_clauses_length[i]]),
+                                       splitted_init_clauses[i][self.init_clauses_length[i]:]],
+                               axis=0)
+                     for _ in range(self.num_shuffles)]
+                    for i in range(self.num_proof)]
+                    
+                2) No shuffle at all -> Problem: bad generalization
+                splitted_init_clauses = [
                      [splitted_init_clauses[i]
                      for _ in range(self.num_shuffles)]
-                    for i in range(len(splitted_init_clauses))]  # Shuffle init clauses for better generalization
+                    for i in range(self.num_proof)]
+                    
+                3) Hard coded shuffle -> Best alternative
+                
+                """
+                splitted_init_clauses = [
+                    [tf.gather(params=splitted_init_clauses[proof_index],
+                               indices=shuffle_tensor[shuffle_index, self.init_clauses_length[proof_index]-1])
+                     for shuffle_index in range(self.num_shuffles)]
+                    for proof_index in range(self.num_proof)]  # Shuffle init clauses for better generalization
                 splitted_init_clauses = [tensor for sublist in splitted_init_clauses for tensor in
                                          sublist]  # Flatten list
 
@@ -171,10 +192,10 @@ class CombLSTMNetwork:
             return [tf.stack(values=chosen_states_h, axis=0), tf.stack(values=chosen_states_c, axis=0)]
 
     def short_state_extraction(self, all_states, state_index):
-        print("All states size: "+str(len([a[state_index] for a in all_states])))
+        print("All states size: " + str(len([a[state_index] for a in all_states])))
         state_tensor = tf.stack(values=[a[state_index] for a in all_states], axis=0)
-        print("State tensor size: "+str(state_tensor.get_shape().as_list()))
-        return [state_tensor[self.init_clauses_length[i_proof]-1, i_proof * self.num_shuffles + i_shuffle, :]
+        print("State tensor size: " + str(state_tensor.get_shape().as_list()))
+        return [state_tensor[self.init_clauses_length[i_proof] - 1, i_proof * self.num_shuffles + i_shuffle, :]
                 for i_proof in range(self.num_proof) for i_shuffle in range(self.num_shuffles)]
 
     def first_combination_layer(self, clause_vector, neg_conj_vector, reuse=False):
@@ -193,6 +214,15 @@ class CombLSTMNetwork:
                                                    use_wavenet=False, tensor_height=1)
         # Squeeze so that LSTMs can run with fully connected layers
         self.neg_conj_embedded = tf.squeeze(self.neg_conjecture_embedder.embedded_vector)
+
+    @staticmethod
+    def create_shuffle_tensor(num_init_clauses):
+        shuffle_matrix = [range(num_init_clauses) for _ in range(num_init_clauses)]
+        for i in range(num_init_clauses):
+            a = shuffle_matrix[i][:i + 1]
+            shuffle(a)
+            shuffle_matrix[i][:i + 1] = a
+        return shuffle_matrix
 
     # Convert [a b c d] to [a a b b c c d d]
     @staticmethod
@@ -231,7 +261,7 @@ def test_extract_states():
         batch = []
         for i in range(num_proofs):
             for j in range(num_shuffles):
-                batch.append(range(i*num_shuffles+j+100*l, i*num_shuffles+j+4+100*l))
+                batch.append(range(i * num_shuffles + j + 100 * l, i * num_shuffles + j + 4 + 100 * l))
         a = [tf.constant(batch)]
         overall_states.append(a)
     print(overall_states)
@@ -244,6 +274,12 @@ def test_extract_states():
         print(out)
 
 
+def test_shuffle_tensor():
+    num_init_clauses = 32
+    shuffle_matrix = CombLSTMNetwork.create_shuffle_tensor(num_init_clauses)
+    print(shuffle_matrix)
+
+
 def visualize_graph():
     with tf.Session() as sess:
         network = CombLSTMNetwork()
@@ -252,5 +288,6 @@ def visualize_graph():
 
 
 if __name__ == '__main__':
-    #test_extract_states()
-    visualize_graph()
+    # test_extract_states()
+    # visualize_graph()
+    test_shuffle_tensor()

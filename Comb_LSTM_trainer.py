@@ -62,7 +62,7 @@ class CombLSTMTrainer(ModelTrainer):
         return self.num_proofs * (self.num_initial_clauses + self.num_training_clauses)
 
     def print_specific_loss_information(self, all_losses):
-        s = "\t"*4
+        s = "\t"*6
         proof_size = len(all_losses) / self.num_proofs
         for i in range(self.num_proofs):
             if i > 0:

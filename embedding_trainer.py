@@ -143,7 +143,7 @@ if __name__ == '__main__':
         num_proofs=4,
         num_training_clauses=32,
         num_initial_clauses=32,
-        num_shuffles=4,
+        num_shuffles=16,
         val_batch_number=20
     )
     trainer = EmbeddingTrainer(model_trainer=modtr, checkpoint_dir="CNN_LSTM", val_batch_number=20,
