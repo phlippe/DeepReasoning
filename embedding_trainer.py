@@ -138,9 +138,9 @@ if __name__ == '__main__':
     base_path = "/home/phillip/"
     modtr = CombLSTMTrainer(
         train_files=convert_to_absolute_path(base_path+"datasets/Cluster/Training/ClauseWeight_",
-                                             get_TPTP_train_files()),
+                                             get_TPTP_train_small()),
         test_files=convert_to_absolute_path(base_path+"datasets/Cluster/Training/ClauseWeight_",
-                                            get_TPTP_test_files()),
+                                            get_TPTP_test_small()),
         num_proofs=6,
         num_training_clauses=32,
         num_initial_clauses=32,

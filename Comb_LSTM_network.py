@@ -73,7 +73,7 @@ class CombLSTMNetwork:
                                                                                             self.weight0, self.weight1)
 
     def repeat_lstm_states(self, state):
-        rep_factor = self.num_train_clauses / self.num_shuffles
+        rep_factor = int(self.num_train_clauses / self.num_shuffles)
         repeated_hidden_states = CombLSTMNetwork.repeat_tensor(tensor_to_repeat=state[0], axis=0, times=rep_factor)
         repeated_current_states = CombLSTMNetwork.repeat_tensor(tensor_to_repeat=state[1], axis=0, times=rep_factor)
         print("Repeat factor: " + str(rep_factor))
@@ -217,7 +217,7 @@ class CombLSTMNetwork:
 
     @staticmethod
     def create_shuffle_tensor(num_init_clauses):
-        shuffle_matrix = [range(num_init_clauses) for _ in range(num_init_clauses)]
+        shuffle_matrix = [list(range(num_init_clauses)) for _ in range(num_init_clauses)]
         for i in range(num_init_clauses):
             a = shuffle_matrix[i][:i + 1]
             shuffle(a)
@@ -235,7 +235,7 @@ class CombLSTMNetwork:
             output_shape = input_shape[:]
             output_shape[axis] *= times
             multiples = [1 for _ in range(len(input_shape))]
-            multiples.insert(axis + 1, times)
+            multiples.insert(axis + 1, int(times))
             input_shape.insert(axis + 1, 1)
             tensor_to_repeat = tf.reshape(tensor_to_repeat, shape=input_shape)
             tensor_to_repeat = tf.tile(tensor_to_repeat, multiples=multiples)
@@ -261,7 +261,7 @@ def test_extract_states():
         batch = []
         for i in range(num_proofs):
             for j in range(num_shuffles):
-                batch.append(range(i * num_shuffles + j + 100 * l, i * num_shuffles + j + 4 + 100 * l))
+                batch.append(list(range(i * num_shuffles + j + 100 * l, i * num_shuffles + j + 4 + 100 * l)))
         a = [tf.constant(batch)]
         overall_states.append(a)
     print(overall_states)

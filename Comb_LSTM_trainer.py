@@ -63,7 +63,7 @@ class CombLSTMTrainer(ModelTrainer):
 
     def process_specific_loss_information(self, all_losses):
         s = "\t" * 6
-        proof_size = len(all_losses) / self.num_proofs
+        proof_size = int(len(all_losses) / self.num_proofs)
         all_proof_losses = []
         all_files = []
         for i in range(self.num_proofs):

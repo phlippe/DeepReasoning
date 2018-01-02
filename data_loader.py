@@ -9,7 +9,8 @@ import math
 from data_augmenter import DataAugmenter, DefaultAugmenter
 from TPTP_train_val_files import *
 if sys.version_info[0] < 3:
-    pass
+    print(" [!] ERROR: Could not import module thread. Python version "+str(sys.version_info))
+    sys.exit(1)
     # from thread import start_new_thread
 else:
     from _thread import start_new_thread
