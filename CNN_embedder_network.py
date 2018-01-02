@@ -9,7 +9,7 @@ from ops import *
 class CNNEmbedder:
     def __init__(self, embedding_size, layer_number=3, channel_size=-1, kernel_size=5, batch_size=1, input_channels=-1,
                  char_number=50, name="CNNEmbedder", reuse_vocab=False, tensor_height=1, use_wavenet=False,
-                 reuse_weights=False):
+                 reuse_weights=False, use_batch_norm=False):
 
         assert layer_number > 0, "Number of layers can not be negative nor 0"
         assert embedding_size > 0, "The embedding size can not be negative nor 0"
@@ -34,6 +34,7 @@ class CNNEmbedder:
         self.tensor_height = tensor_height
         self.use_wavenet = use_wavenet
         self.reuse_weights = reuse_weights
+        self.use_batch_norm = use_batch_norm
 
         self.vocab_table = None
         self.arity_table = None
@@ -70,11 +71,14 @@ class CNNEmbedder:
 
             if not self.use_wavenet:
                 first_layer = conv1d(input_=input_tensor, output_dim=self.channel_size, kernel_size=self.kernel_size,
-                                     name=self.name + "_Conv1", relu=True, use_batch_norm=True, reuse=self.reuse_weights)
+                                     name=self.name + "_Conv1", relu=True, use_batch_norm=self.use_batch_norm,
+                                     reuse=self.reuse_weights)
                 second_layer = conv1d(input_=first_layer, output_dim=self.channel_size, kernel_size=self.kernel_size,
-                                      name=self.name + "_Conv2", relu=True, use_batch_norm=True, reuse=self.reuse_weights)
+                                      name=self.name + "_Conv2", relu=True, use_batch_norm=self.use_batch_norm,
+                                      reuse=self.reuse_weights)
                 final_layer = conv1d(input_=second_layer, output_dim=self.embedding_size, kernel_size=self.kernel_size,
-                                     name=self.name + "_Conv3", relu=True, use_batch_norm=True, reuse=self.reuse_weights)
+                                     name=self.name + "_Conv3", relu=True, use_batch_norm=self.use_batch_norm,
+                                     reuse=self.reuse_weights)
             else:
                 first_layer = wavenet_layer(input_=input_tensor, kernel_size=self.kernel_size, dilation_rate=1,
                                             name=self.name + "_Conv1", reuse=self.reuse_weights)
@@ -140,7 +144,8 @@ class CNNEmbedder:
             self.vocab_index_tensor, self.vocab_offset = self.create_index_vector()
             self.arity_index_tensor, max_arity = self.create_arity_vector()
 
-            self.vocab_table = tf.get_variable("Vocabs", shape=[max(vocab_values) + vocab_offset, self.channel_size / 2],
+            self.vocab_table = tf.get_variable("Vocabs",
+                                               shape=[max(vocab_values) + vocab_offset, self.channel_size / 2],
                                                dtype=tf.float32,
                                                initializer=tf.contrib.layers.xavier_initializer())
             self.arity_table = tf.get_variable("Arities", shape=[max_arity, self.channel_size / 2],

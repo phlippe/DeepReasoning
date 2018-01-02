@@ -40,5 +40,5 @@ class CNNEmbedderTrainer(ModelTrainer):
     def get_test_batch(self, batch_size):
         return self.test_loader.get_batch(batch_size)
 
-    def print_specific_loss_information(self, all_losses):
+    def process_specific_loss_information(self, all_losses):
         pass

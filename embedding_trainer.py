@@ -105,7 +105,7 @@ class EmbeddingTrainer:
                     "Iters: [%5d|%5d], time: %4.4f, clause size: %2d|%2d, loss: %.5f, loss ones:%.5f, loss zeros:%.5f" % (
                         training_step, self.training_iter, time.time() - start_time, np.max(batch[1]), np.max(batch[3]),
                         loss, loss_ones, loss_zeros))
-                self.model_trainer.print_specific_loss_information(all_losses)
+                self.model_trainer.process_specific_loss_information(all_losses)
 
     def run_validation(self, sess):
         avg_loss = np.zeros(shape=3, dtype=np.float32)
@@ -140,10 +140,10 @@ if __name__ == '__main__':
                                              get_TPTP_train_small()),
         test_files=convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_",
                                             get_TPTP_test_small()),
-        num_proofs=4,
+        num_proofs=6,
         num_training_clauses=32,
         num_initial_clauses=32,
-        num_shuffles=16,
+        num_shuffles=4,
         val_batch_number=20
     )
     trainer = EmbeddingTrainer(model_trainer=modtr, checkpoint_dir="CNN_LSTM", val_batch_number=20,

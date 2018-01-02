@@ -86,7 +86,7 @@ class CombLSTMNetwork:
     def embed_clauses(self):
         self.clause_embedder = CNNEmbedder(embedding_size=self.embedding_size, name="ClauseEmbedder",
                                            batch_size=self.batch_size + self.num_init_clauses * self.num_proof,
-                                           char_number=None, use_wavenet=False, tensor_height=1)
+                                           char_number=None, use_wavenet=False, tensor_height=1, use_batch_norm=False)
         # Squeeze so that LSTMs can run with fully connected layers
         all_clauses = tf.split(tf.squeeze(self.clause_embedder.embedded_vector), num_or_size_splits=2, axis=0)
         self.train_clauses = all_clauses[0]
@@ -211,7 +211,7 @@ class CombLSTMNetwork:
     def embed_neg_conjecture(self):
         self.neg_conjecture_embedder = CNNEmbedder(embedding_size=self.embedding_size, name="NegConjectureEmbedder",
                                                    reuse_vocab=True, batch_size=self.num_proof, char_number=None,
-                                                   use_wavenet=False, tensor_height=1)
+                                                   use_wavenet=False, tensor_height=1, use_batch_norm=False)
         # Squeeze so that LSTMs can run with fully connected layers
         self.neg_conj_embedded = tf.squeeze(self.neg_conjecture_embedder.embedded_vector)
 

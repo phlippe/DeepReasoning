@@ -3,7 +3,7 @@ from glob import glob
 from data_augmenter import DataAugmenter, DefaultAugmenter
 
 import math
-from random import shuffle
+from random import shuffle, randint, seed
 import numpy as np
 import thread
 from TPTP_train_val_files import *
@@ -13,7 +13,7 @@ LABEL_NEGATIVE = 1
 
 
 class InitialClauseLoader:
-    def __init__(self, file_list, empty_char=5, augment=True, prob_pos=0.3):
+    def __init__(self, file_list, empty_char=5, augment=True, prob_pos=0.3, index_divider=32):
         if augment:
             self.augmenter = DataAugmenter()
         else:
@@ -29,11 +29,15 @@ class InitialClauseLoader:
         self.proof_loader = ClauseLoader.initialize_proof_loader(file_list)
 
         for index in range(len(self.proof_loader)):
-            self.proof_indices = self.proof_indices + [index for _ in range(int(math.ceil(
-                self.proof_loader[index].get_number_of_positives() +
-                math.sqrt(self.proof_loader[index].get_number_of_negatives())
+            new_indices = [index for _ in range(int(math.ceil(
+                (self.proof_loader[index].get_number_of_positives() +
+                 math.sqrt(self.proof_loader[index].get_number_of_negatives())) * 1.0 / index_divider
             )))]
+            print("Created "+str(len(new_indices))+" new indices")
+            self.proof_indices = self.proof_indices + new_indices
 
+        print("Created "+str(len(self.proof_indices))+" proof indices")
+        seed()  # Initialize random number generator
         self.permute_proofs()
 
     def permute_proofs(self):
@@ -43,7 +47,7 @@ class InitialClauseLoader:
     def get_proof(self):
         if self.proof_index >= len(self.proof_indices):
             self.permute_proofs()
-        proof = self.proof_loader[self.proof_indices[self.proof_index]]
+        proof = self.proof_indices[self.proof_index]
         self.proof_index += 1
         return proof
 
@@ -73,14 +77,15 @@ class InitialClauseLoader:
         training_clauses = []
         initial_clauses = []
         init_clause_lengths = np.zeros(shape=num_proofs, dtype=np.int32)
-        file_prefixes = []
+        proofs_chosen = []
 
         batch_size = num_proofs * (num_training_clauses + num_init_clauses)
 
         # Collect all clauses
         for p in range(num_proofs):
-            proof = self.get_proof()
-            file_prefixes.append(proof.prefix.split("/", -1)[-1].split("_")[-1])
+            proof_ind = self.get_proof()
+            proof = self.proof_loader[proof_ind]
+            proofs_chosen.append(proof_ind)
             # Prepare initial clauses
             ic = proof.get_init_clauses(num_init_clauses)
             initial_clauses.append(ic)
@@ -123,20 +128,41 @@ class InitialClauseLoader:
             neg_conj_batch = neg_conj_batch[:, :150]
             batch_neg_conj_length = np.minimum(batch_neg_conj_length, 150)
         self.global_batch = [clause_batch, batch_clause_length, neg_conj_batch, batch_neg_conj_length,
-                             init_clause_lengths, labels, file_prefixes]
+                             init_clause_lengths, labels, proofs_chosen]
 
     def print_statistic(self):
         ClauseLoader.print_loader_statistic(self.proof_loader)
 
+    def add_proof_index(self, pindex):
+        insert_index = randint(self.proof_index if self.proof_index < len(self.proof_loader) else 0,
+                               min(self.proof_index+100, len(self.proof_loader)))
+        self.proof_indices.insert(insert_index, pindex)
+
+    def remove_proof_index(self, pindex):
+        if self.proof_indices.count(pindex) > 1:
+            last_occ = len(self.proof_indices) - 1 - self.proof_indices[::-1].index(pindex)
+            del self.proof_indices[last_occ]
+
 
 if __name__ == "__main__":
-    a = InitialClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_", get_TPTP_train_small()))
-    for loader in a.proof_loader:
-        print("Init clauses: "+str(loader.get_number_init_clauses()))
-    batch = a.get_batch(num_proofs=4, num_training_clauses=32, num_init_clauses=32)
-    print("="*50+"\nClauses: "+str(batch[0].shape)+"\n"+str(batch[0]))
-    print("="*50+"\nClauses length:"+str(batch[1].shape)+"\n"+str(batch[1]))
-    print("="*50+"\nNegated conjecture: "+str(batch[2].shape)+"\n"+str(batch[2]))
-    print("="*50+"\nNegated conjecture length:"+str(batch[3].shape)+"\n"+str(batch[3]))
-    print("="*50+"\nInitial clause lengths: "+str(batch[4].shape)+"\n"+str(batch[4]))
-    print("="*50+"\nLabels:"+str(batch[5].shape)+"\n"+str(batch[5]))
+    a = InitialClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_",
+                                                     get_TPTP_train_small()))
+    print(str(a.proof_indices))
+    print("Insert index 8")
+    a.add_proof_index(8)
+    print(str(a.proof_indices))
+    for _ in range(5):
+        print("Remove index 10")
+        a.remove_proof_index(10)
+        print(str(a.proof_indices))
+    print("Remove index 7")
+    a.remove_proof_index(7)
+    print(str(a.proof_indices))
+    # proof
+    # batch = a.get_batch(num_proofs=4, num_training_clauses=32, num_init_clauses=32)
+    # print("="*50+"\nClauses: "+str(batch[0].shape)+"\n"+str(batch[0]))
+    # print("="*50+"\nClauses length:"+str(batch[1].shape)+"\n"+str(batch[1]))
+    # print("="*50+"\nNegated conjecture: "+str(batch[2].shape)+"\n"+str(batch[2]))
+    # print("="*50+"\nNegated conjecture length:"+str(batch[3].shape)+"\n"+str(batch[3]))
+    # print("="*50+"\nInitial clause lengths: "+str(batch[4].shape)+"\n"+str(batch[4]))
+    # print("="*50+"\nLabels:"+str(batch[5].shape)+"\n"+str(batch[5]))
