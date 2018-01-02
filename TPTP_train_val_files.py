@@ -28,7 +28,6 @@ def get_TPTP_test_files():
             'LCL176-1', 'RNG035-7']
 
 
-
 def get_TPTP_train_files():
     return ['FLD017-3', 'SET931+1', 'GRP655+3', 'GRP076-1', 'LCL668+1', 'REL012+1', 'NUM022-1', 'SET059-7', 'GRP585-1',
             'GRP510-1', 'GRP412-1', 'LCL109-1', 'SET643+3', 'SET903+1', 'SET045+1', 'KLE069+1', 'SET516-6', 'SET073-6',

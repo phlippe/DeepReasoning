@@ -7,7 +7,7 @@ from CNN_embedder_network import CNNEmbedder
 # ClauseWeight - /home/phillip/datasets/Cluster/*/*/E-Prover_TF_Very_Silent___E---2.0_G----_0003_C18_F1_SE_CS_SP_S0Y/*/*.txt
 # Best - /home/phillip/datasets/Cluster/*/*/E-Prover_TF_Very_Silent___E---2.0_G-E--_208_C18_F1_SE_CS_SP_PS_S0Y/*/*.txt
 
-ALL_FILES = sorted(glob("/home/phillip/datasets/Cluster/Job25658_output/*/E-Prover_TF_*___E---2.0_G----_0003_C18_F1_SE_CS_SP_S0Y/*/*.txt"))
+ALL_FILES = sorted(glob("/home/phillip/datasets/Cluster/Job25658_output/*/E-Prover_TF_*___E---2.0_G----_0003_C18_F1_SE_CS_SP_S0Y/REL015-1*/*.txt"))
 OUTPUT_DIR = "/home/phillip/datasets/Cluster/InitClauses/"
 PREFIX = "ClauseWeight_"
 VOCAB_CODES = CNNEmbedder.get_vocabulary().values()

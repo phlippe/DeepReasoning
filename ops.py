@@ -168,7 +168,7 @@ def fully_connected(input_, outputs, activation_fn=tf.nn.relu, reuse=False, name
     with tf.variable_scope(name):
         # Earlier: fc = tf.contrib.layers.fully_connected(input_, outputs, activation_fn, reuse=reuse)
         # Now using 1x1 convolution for possible height dimension
-        fc = activation_fn(conv1d(input_=input_, output_dim=outputs, kernel_size=1, relu=reuse, name=name, use_batch_norm=False))
+        fc = activation_fn(conv1d(input_=input_, output_dim=outputs, kernel_size=1, relu=False, reuse=reuse, name=name, use_batch_norm=False))
         if use_batch_norm:
             fc = tf.layers.batch_normalization(fc)
         return fc
@@ -262,7 +262,7 @@ def weighted_BCE_loss(predictions, labels, weight0=1, weight1=1):
         zeros_mean = tf.reduce_mean(cross_entropy * inv_labels, name="zeros_mean") * label_shape[
             0] / tf.reduce_sum(inv_labels)
 
-        return cross_entropy_mean, ones_mean, zeros_mean
+        return cross_entropy_mean, ones_mean, zeros_mean, cross_entropy
 
 
 def concat(values, axis, name="Concat"):

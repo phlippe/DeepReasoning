@@ -40,5 +40,5 @@ class CombNetwork:
             self.weight = tf.squeeze(self.weight, name="CalcWeights")
             if self.tensor_height != 1:
                 self.weight = tf.reshape(tensor=self.weight, shape=[-1], name="ReshapeTo1D")
-            self.loss, self.loss_ones, self.loss_zeros = weighted_BCE_loss(self.weight, self.labels, self.weight0,
-                                                                           self.weight1)
+            self.loss, self.loss_ones, self.loss_zeros, _ = weighted_BCE_loss(self.weight, self.labels, self.weight0,
+                                                                              self.weight1)

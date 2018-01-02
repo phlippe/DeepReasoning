@@ -1,0 +1,142 @@
+from data_loader import ProofExampleLoader, ClauseLoader, get_clause_lengths
+from glob import glob
+from data_augmenter import DataAugmenter, DefaultAugmenter
+
+import math
+from random import shuffle
+import numpy as np
+import thread
+from TPTP_train_val_files import *
+
+LABEL_POSITIVE = 0
+LABEL_NEGATIVE = 1
+
+
+class InitialClauseLoader:
+    def __init__(self, file_list, empty_char=5, augment=True, prob_pos=0.3):
+        if augment:
+            self.augmenter = DataAugmenter()
+        else:
+            self.augmenter = DefaultAugmenter()
+        self.empty_char = int(empty_char)
+        self.prob_pos = prob_pos
+        self.proof_loader = []
+        self.proof_indices = []
+        self.proof_index = 0
+        self.pos_next = True
+        self.global_batch = None
+
+        self.proof_loader = ClauseLoader.initialize_proof_loader(file_list)
+
+        for index in range(len(self.proof_loader)):
+            self.proof_indices = self.proof_indices + [index for _ in range(int(math.ceil(
+                self.proof_loader[index].get_number_of_positives() +
+                math.sqrt(self.proof_loader[index].get_number_of_negatives())
+            )))]
+
+        self.permute_proofs()
+
+    def permute_proofs(self):
+        shuffle(self.proof_indices)
+        self.proof_index = 0
+
+    def get_proof(self):
+        if self.proof_index >= len(self.proof_indices):
+            self.permute_proofs()
+        proof = self.proof_loader[self.proof_indices[self.proof_index]]
+        self.proof_index += 1
+        return proof
+
+    def get_batch(self, num_proofs, num_training_clauses, num_init_clauses):
+        if self.global_batch is None:
+            self.__get_batch(num_proofs, num_training_clauses, num_init_clauses)
+        current_batch = self.global_batch
+        self.global_batch = None
+        thread.start_new_thread(self.__get_batch, (num_proofs, num_training_clauses, num_init_clauses))
+        return current_batch
+
+    def __get_batch(self, num_proofs, num_training_clauses, num_init_clauses):
+        """
+        Creating a batch of clauses with the following structure:
+            batch = [training clauses, initial clauses]
+            training clauses = num_proof * num_training_clauses * [pos/neg clauses of proof]
+            initial clauses = num_proof * num_init_clauses * [initial clause of proof]
+
+        :param num_proofs:
+        :param num_training_clauses:
+        :param num_init_clauses:
+        :return:
+        """
+        global LABEL_NEGATIVE, LABEL_POSITIVE
+        batch_neg_conj = []
+        labels = np.zeros(shape=num_proofs*num_training_clauses, dtype=np.int32)
+        training_clauses = []
+        initial_clauses = []
+        init_clause_lengths = np.zeros(shape=num_proofs, dtype=np.int32)
+        file_prefixes = []
+
+        batch_size = num_proofs * (num_training_clauses + num_init_clauses)
+
+        # Collect all clauses
+        for p in range(num_proofs):
+            proof = self.get_proof()
+            file_prefixes.append(proof.prefix.split("/", -1)[-1].split("_")[-1])
+            # Prepare initial clauses
+            ic = proof.get_init_clauses(num_init_clauses)
+            initial_clauses.append(ic)
+            init_clause_lengths[p] = min(proof.get_number_init_clauses(), num_init_clauses)
+            # One negated conjecture per proof
+            batch_neg_conj.append(proof.get_negated_conjecture())
+            if proof.get_number_of_negatives() == 0:
+                pos_next = np.zeros(shape=num_training_clauses) + 1
+            elif proof.get_number_of_positives() == 0:
+                pos_next = np.zeros(shape=num_training_clauses)
+            else:
+                pos_next = np.random.choice(a=[0, 1], size=num_training_clauses, p=[1 - self.prob_pos, self.prob_pos])
+            for c in range(num_training_clauses):
+                if pos_next[c] == 1:
+                    training_clauses.append(proof.get_positive())
+                    labels[p*num_training_clauses+c] = LABEL_POSITIVE
+                else:
+                    training_clauses.append(proof.get_negative())
+                    labels[p*num_training_clauses+c] = LABEL_NEGATIVE
+        # Augment all clauses
+        initial_clauses = [self.augmenter.augment_clause(clause) for sublist in initial_clauses for clause in sublist]
+        training_clauses = [self.augmenter.augment_clause(clause) for clause in training_clauses]
+        batch_neg_conj = [self.augmenter.augment_clause(clause) for clause in batch_neg_conj]
+        batch_clauses = training_clauses + initial_clauses
+
+        batch_clause_length = get_clause_lengths(batch_clauses)
+        batch_neg_conj_length = get_clause_lengths(batch_neg_conj)
+        clause_batch = np.zeros(shape=[batch_size, max(batch_clause_length)], dtype=np.int32) + self.empty_char
+        neg_conj_batch = np.zeros(shape=[num_proofs, max(batch_neg_conj_length)], dtype=np.int32) + self.empty_char
+        batch_clause_length = np.array(batch_clause_length)
+        batch_neg_conj_length = np.array(batch_neg_conj_length)
+        for b in range(batch_size):
+            clause_batch[b, :batch_clause_length[b]] = np.array(batch_clauses[b])
+        for b in range(num_proofs):
+            neg_conj_batch[b, :batch_neg_conj_length[b]] = np.array(batch_neg_conj[b])
+        if max(batch_clause_length) > 150:
+            clause_batch = clause_batch[:, :150]
+            batch_clause_length = np.minimum(batch_clause_length, 150)
+        if max(batch_neg_conj_length) > 150:
+            neg_conj_batch = neg_conj_batch[:, :150]
+            batch_neg_conj_length = np.minimum(batch_neg_conj_length, 150)
+        self.global_batch = [clause_batch, batch_clause_length, neg_conj_batch, batch_neg_conj_length,
+                             init_clause_lengths, labels, file_prefixes]
+
+    def print_statistic(self):
+        ClauseLoader.print_loader_statistic(self.proof_loader)
+
+
+if __name__ == "__main__":
+    a = InitialClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_", get_TPTP_train_small()))
+    for loader in a.proof_loader:
+        print("Init clauses: "+str(loader.get_number_init_clauses()))
+    batch = a.get_batch(num_proofs=4, num_training_clauses=32, num_init_clauses=32)
+    print("="*50+"\nClauses: "+str(batch[0].shape)+"\n"+str(batch[0]))
+    print("="*50+"\nClauses length:"+str(batch[1].shape)+"\n"+str(batch[1]))
+    print("="*50+"\nNegated conjecture: "+str(batch[2].shape)+"\n"+str(batch[2]))
+    print("="*50+"\nNegated conjecture length:"+str(batch[3].shape)+"\n"+str(batch[3]))
+    print("="*50+"\nInitial clause lengths: "+str(batch[4].shape)+"\n"+str(batch[4]))
+    print("="*50+"\nLabels:"+str(batch[5].shape)+"\n"+str(batch[5]))

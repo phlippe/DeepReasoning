@@ -7,20 +7,32 @@ from TPTP_train_val_files import get_TPTP_test_files, get_TPTP_train_files, conv
 from CNN_embedder_network import CNNEmbedder
 from Comb_network import CombNetwork
 from data_loader import ClauseLoader
+from CNN_embedder_trainer import CNNEmbedderTrainer
+from Comb_LSTM_trainer import CombLSTMTrainer
 from ops import *
+from model_trainer import ModelTrainer
 
 
 class EmbeddingTrainer:
-    def __init__(self, train_files, test_files, batch_size=1024, embedding_size=1024, iterations=100000,
+    def __init__(self, model_trainer, batch_size=1024, embedding_size=1024, iterations=100000,
                  val_steps=1000, save_steps=1000, checkpoint_dir='CNN_Embedder', model_name='CNNEmbedder',
-                 summary_dir='logs', val_batch_number=20, lr=0.00001, use_wavenet=False):
+                 summary_dir='logs', val_batch_number=20, lr=0.00001, loading_model=False, load_vocab=False):
 
-        self.train_loader = ClauseLoader(file_list=train_files, prob_pos=0.5)
-        self.test_loader = ClauseLoader(file_list=test_files, augment=False)
-        self.train_loader.print_statistic()
-        self.test_loader.print_statistic()
+        assert issubclass(type(model_trainer),
+                          ModelTrainer), "Parameter model_trainer has to be a model_trainer.ModelTrainer"
+        assert batch_size > 0 and type(batch_size) is int, "The batch size has to be greater zero and an integer"
+        assert embedding_size > 0 and type(
+            embedding_size) is int, "The embedding size has to be greater zero and an integer"
+        assert val_steps > 0 and type(
+            val_steps) is int, "The frequency of validation steps has to be greater zero and an integer"
+
+        # self.train_loader = ClauseLoader(file_list=train_files, prob_pos=0.5)
+        # self.test_loader = ClauseLoader(file_list=test_files, augment=False)
+        # self.train_loader.print_statistic()
+        # self.test_loader.print_statistic()
 
         self.model = None
+        self.model_trainer = model_trainer
 
         self.training_iter = iterations
         self.val_steps = val_steps
@@ -28,6 +40,8 @@ class EmbeddingTrainer:
         self.batch_size = batch_size
         self.val_batch_number = val_batch_number
         self.lr = lr
+        self.loading_model = loading_model
+        self.load_vocab = load_vocab
 
         self.checkpoint_dir = checkpoint_dir
         if not os.path.exists(checkpoint_dir):
@@ -35,16 +49,7 @@ class EmbeddingTrainer:
         self.model_name = model_name
         self.summary_dir = summary_dir
 
-        self.create_model(batch_size, embedding_size, use_wavenet)
-
-    def create_model(self, batch_size, embedding_size, use_wavenet):
-        clause_embedder = CNNEmbedder(embedding_size=embedding_size, name="ClauseEmbedder",
-                                      batch_size=batch_size, char_number=None, use_wavenet=use_wavenet)
-        neg_conjecture_embedder = CNNEmbedder(embedding_size=embedding_size, name="NegConjectureEmbedder",
-                                              reuse_vocab=True, batch_size=batch_size, char_number=None,
-                                              use_wavenet=use_wavenet)
-        combined_network = CombNetwork(clause_embedder, neg_conjecture_embedder, weight0=1, weight1=1)
-        self.model = combined_network
+        self.model = self.model_trainer.create_model(batch_size, embedding_size)
 
     def run_training(self):
         print("Start training with batch size " + str(self.batch_size) + " for " + str(
@@ -55,10 +60,19 @@ class EmbeddingTrainer:
 
         with tf.Session() as sess:
             sess.run(initialize_tf_variables())
-            if False and load_model(saver, sess, self.checkpoint_dir, self.model_name):
+            if self.loading_model and load_model(saver, sess, self.checkpoint_dir):
                 print(" [*] Load model - SUCCESS")
-            else:
+            elif self.loading_model:
                 print(" [!] Load model - failed...")
+            elif self.load_vocab:
+                vocab_saver = tf.train.Saver({"CombLSTMNet/Vocabulary/Vocabs": self.model.clause_embedder.vocab_table,
+                                              "CombLSTMNet/Vocabulary/Arities": self.model.clause_embedder.arity_table})
+                if load_model(vocab_saver, sess, self.checkpoint_dir):
+                    print(" [*] Load vocabulary - SUCCESS")
+                else:
+                    print(" [!] Load vocabulary - failed...")
+            else:
+                print(" [*] No model was loaded...")
 
             self.create_summary()
             summary = tf.summary.merge_all()
@@ -79,34 +93,27 @@ class EmbeddingTrainer:
                     val_writer.add_summary(val_summary_str, training_step)
 
                 start_time = time.time()
-                batch = self.train_loader.get_batch(self.batch_size)
-                loss, loss_zeros, loss_ones, sum_str, _ = self.run_model(sess, [self.model.loss, self.model.loss_zeros,
-                                                                                self.model.loss_ones, summary,
-                                                                                optimizer], batch)
+                batch = self.model_trainer.get_train_batch(self.batch_size)
+                loss, loss_zeros, loss_ones, all_losses, sum_str, _ = \
+                    self.model_trainer.run_model(sess, self.model, [self.model.loss, self.model.loss_zeros,
+                                                                    self.model.loss_ones, self.model.all_losses,
+                                                                    summary, optimizer], batch)
+
                 if training_step % 10 == 0:
                     train_writer.add_summary(sum_str, training_step)
                 print(
-                "Iters: [%5d|%5d], time: %4.4f, clause size: %2d|%2d, loss: %.5f, loss ones:%.5f, loss zeros:%.5f" % (
-                    training_step, self.training_iter, time.time() - start_time, np.max(batch[1]), np.max(batch[3]),
-                    loss, loss_ones, loss_zeros))
-
-    def run_model(self, sess, fetches, batch):
-        input_clause, input_clause_len, input_conj, input_conj_len, labels = batch
-        feed_dict = {
-            self.model.clause_embedder.input_clause: input_clause,
-            self.model.neg_conjecture_embedder.input_clause: input_conj,
-            self.model.clause_embedder.input_length: input_clause_len,
-            self.model.neg_conjecture_embedder.input_length: input_conj_len,
-            self.model.labels: labels
-        }
-        return sess.run(fetches, feed_dict=feed_dict)
+                    "Iters: [%5d|%5d], time: %4.4f, clause size: %2d|%2d, loss: %.5f, loss ones:%.5f, loss zeros:%.5f" % (
+                        training_step, self.training_iter, time.time() - start_time, np.max(batch[1]), np.max(batch[3]),
+                        loss, loss_ones, loss_zeros))
+                self.model_trainer.print_specific_loss_information(all_losses)
 
     def run_validation(self, sess):
         avg_loss = np.zeros(shape=3, dtype=np.float32)
         for batch_index in range(self.val_batch_number):
-            batch = self.test_loader.get_batch(self.batch_size)
-            loss_all, loss_ones, loss_zeros = self.run_model(sess, [self.model.loss, self.model.loss_ones,
-                                                                    self.model.loss_zeros], batch)
+            batch = self.model_trainer.get_test_batch(self.batch_size)
+            loss_all, loss_ones, loss_zeros = self.model_trainer.run_model(sess, self.model,
+                                                                           [self.model.loss, self.model.loss_ones,
+                                                                            self.model.loss_zeros], batch)
             avg_loss += np.array([loss_all, loss_ones, loss_zeros])
         avg_loss = avg_loss / self.val_batch_number
         print("#" * 125)
@@ -127,10 +134,18 @@ class EmbeddingTrainer:
         tf.summary.scalar('Lowest prediction', tf.reduce_min(self.model.weight))
 
 
-trainer = EmbeddingTrainer(
-    train_files=convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_",
-                                         get_TPTP_train_files()),
-    test_files=convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_", get_TPTP_test_files()),
-    checkpoint_dir="CNN_Embedder_BatchNorm",
-    batch_size=256, val_steps=200, save_steps=200, use_wavenet=False, lr=0.00001)
-trainer.run_training()
+if __name__ == '__main__':
+    modtr = CombLSTMTrainer(
+        train_files=convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_",
+                                             get_TPTP_train_small()),
+        test_files=convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_",
+                                            get_TPTP_test_small()),
+        num_proofs=4,
+        num_training_clauses=32,
+        num_initial_clauses=32,
+        num_shuffles=4,
+        val_batch_number=20
+    )
+    trainer = EmbeddingTrainer(model_trainer=modtr, checkpoint_dir="CNN_LSTM", val_batch_number=20,
+                               batch_size=256, val_steps=200, save_steps=200, lr=0.00001, load_vocab=True)
+    trainer.run_training()
