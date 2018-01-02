@@ -138,9 +138,9 @@ class EmbeddingTrainer:
 def start_training(args):
     modtr = CombLSTMTrainer(
         train_files=convert_to_absolute_path(args.path + "datasets/Cluster/Training/ClauseWeight_",
-                                             get_TPTP_train_small()),
+                                             get_TPTP_train_files() if not args.small_files else get_TPTP_train_small()),
         test_files=convert_to_absolute_path(args.path + "datasets/Cluster/Training/ClauseWeight_",
-                                            get_TPTP_test_small()),
+                                            get_TPTP_test_files() if not args.small_files else get_TPTP_test_small()),
         num_proofs=args.num_proofs,
         num_training_clauses=args.num_training,
         num_initial_clauses=args.num_init,
@@ -172,6 +172,8 @@ if __name__ == '__main__':
     parser.add_argument('-lv', '--load_vocab', action="store_true",
                         help='If previous vocabulary should be loaded or not')
     parser.add_argument('-lm', '--load_model', action="store_true", help='If previous model should be loaded or not')
+    parser.add_argument('-sf', '--small_files', action="store_true",
+                        help='If only a small amount of files should be used for training and testing')
 
     args = parser.parse_args()
 
