@@ -89,7 +89,7 @@ class CombLSTMTrainer(ModelTrainer):
         for i in range(len(all_proof_losses)):
             if all_proof_losses[i]/loss_mean >= 1.3:
                 self.train_loader.add_proof_index(self.batch_proofs[i])
-                print(" [#] INFO: Adding extra index of "+all_files[i]+" to train loader")
+                print(" [#] INFO: Adding extra index of "+all_files[i]+" to train loader ("+str(len(self.train_loader.proof_indices))+")")
             if all_proof_losses[i]/loss_mean <= 0.5:
                 self.train_loader.remove_proof_index(self.batch_proofs[i])
-                print(" [#] INFO: Removing a index of "+all_files[i]+" from train loader")
+                print(" [#] INFO: Removing a index of "+all_files[i]+" from train loader ("+str(len(self.train_loader.proof_indices))+")")

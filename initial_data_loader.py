@@ -33,7 +33,7 @@ class InitialClauseLoader:
         self.pos_next = True
         self.global_batch = None
 
-        self.proof_loader = ClauseLoader.initialize_proof_loader(file_list)
+        self.proof_loader = ClauseLoader.initialize_proof_loader([f for f in file_list if 'ClauseWeight_LCL' not in f])
 
         for index in range(len(self.proof_loader)):
             new_indices = [index for _ in range(int(math.ceil(
@@ -139,8 +139,8 @@ class InitialClauseLoader:
         ClauseLoader.print_loader_statistic(self.proof_loader)
 
     def add_proof_index(self, pindex):
-        insert_index = randint(self.proof_index + 32 if self.proof_index + 32 < len(self.proof_loader) else 0,
-                               min(self.proof_index+256, len(self.proof_loader)))
+        insert_index = randint(self.proof_index + 64 if self.proof_index + 64 < len(self.proof_loader) else 0,
+                               min(self.proof_index+384, len(self.proof_loader)))
         self.proof_indices.insert(insert_index, pindex)
 
     def remove_proof_index(self, pindex):
