@@ -177,7 +177,7 @@ def start_training(args):
     trainer = EmbeddingTrainer(model_trainer=modtr, checkpoint_dir="CNN_LSTM", model_name="CNN_LSTM",
                                val_batch_number=20, batch_size=256, val_steps=args.val_steps,
                                save_steps=args.save_steps, lr=0.00001, load_vocab=args.load_vocab,
-                               loading_model=args.load_model, test_steps=2)
+                               loading_model=args.load_model, test_steps=args.test_steps)
     trainer.run_training()
 
 
@@ -194,6 +194,8 @@ if __name__ == '__main__':
     parser.add_argument('-lr', '--lr', default=0.00001, type=float, help='Learning rate of model')
     parser.add_argument('-vs', '--val_steps', default=200, type=int,
                         help='After how many steps the network should be validated')
+    parser.add_argument('-ts', '--test_steps', default=200, type=int,
+                        help='After how many steps the network should be tested. Negative numbers mean no testing at all.')
     parser.add_argument('-ss', '--save_steps', default=600, type=int,
                         help='After how many steps the network should be saved')
     parser.add_argument('-lv', '--load_vocab', action="store_true",
