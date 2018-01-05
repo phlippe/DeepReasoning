@@ -36,7 +36,7 @@ class CombLSTMTrainer(ModelTrainer):
     def create_model(self, batch_size, embedding_size):
         combined_network = CombLSTMNetwork(num_proof=self.num_proofs, num_train_clauses=self.num_training_clauses,
                                            num_shuffles=self.num_shuffles, num_init_clauses=self.num_initial_clauses,
-                                           weight0=0.5 / self.prob_pos, weight1=0.5 / (1 - self.prob_pos))
+                                           weight0=0.5 / self.prob_pos, weight1=1) #0.5 / (1 - self.prob_pos)
         return combined_network
 
     def run_model(self, sess, model, fetches, batch):

@@ -1,4 +1,5 @@
 import os
+import math
 
 import tensorflow as tf
 from tensorflow.python.framework import graph_util
@@ -246,15 +247,14 @@ def freeze_graph(model_folder, output_node_names, file_name="frozen_model.pb"):
 
 def weighted_BCE_loss(predictions, labels, weight0=1, weight1=1):
     with tf.variable_scope("WCE_Loss"):
-        epsilon = tf.constant(1e-5, dtype=tf.float32, name="epsilon")
         inv_labels = 1 - labels
         coef0 = inv_labels * weight0
         coef1 = labels * weight1
         coefficient = coef0 + coef1
         label_shape = labels.get_shape().as_list()
         cross_entropy = - 1.0 * (tf.multiply(
-                            labels * tf.log(predictions + epsilon) +
-                            inv_labels * tf.log(1 - predictions + epsilon), coefficient))
+                            labels * shortened_loss_function(predictions) +
+                            inv_labels * log_loss_function(1 - predictions), coefficient))
         cross_entropy_mean = tf.reduce_mean(
             cross_entropy, name="cross_entropy")
         ones_mean = tf.reduce_mean(cross_entropy * labels, name="ones_mean") * label_shape[
@@ -263,6 +263,17 @@ def weighted_BCE_loss(predictions, labels, weight0=1, weight1=1):
             0] / tf.reduce_sum(inv_labels)
 
         return cross_entropy_mean, ones_mean, zeros_mean, cross_entropy
+
+
+def log_loss_function(value):
+    epsilon = tf.constant(1e-5, dtype=tf.float32, name="epsilon")
+    return tf.log(value + epsilon)
+
+
+def shortened_loss_function(value):
+    # loss(0) = -1
+    # loss(1) = 0
+    return tf.log(((1 + value * (math.e - 1)) / math.e))
 
 
 def concat(values, axis, name="Concat"):
