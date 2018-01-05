@@ -17,7 +17,15 @@ class ModelTrainer:
         pass
 
     @abstractmethod
-    def get_test_batch(self, batch_size):
+    def get_val_batch(self, batch_size):
+        pass
+
+    @abstractmethod
+    def get_test_batches(self, batch_size):
+        pass
+
+    @abstractmethod
+    def process_test_batches(self, weights):
         pass
 
     @abstractmethod

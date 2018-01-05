@@ -19,6 +19,10 @@ def get_TPTP_test_files():
             'GRP010-1', 'KLE089+1', 'NUM626+3', 'GRP555-1', 'NUM559+1', 'KLE144+1', 'SET079+1', 'SET855-2', 'GRP141-1']
 
 
+def get_TPTP_clause_test_files():
+    return ['GRP018-1', 'GRP150-1', 'SET840-2', 'SET602+4', 'LDA007-2', 'KLE144+1', 'FLD010-1', 'RNG090+1', 'NUM559+1']
+
+
 def get_TPTP_train_files():
     return ['FLD017-3', 'SET931+1', 'GRP655+3', 'GRP076-1', 'LCL668+1', 'REL012+1', 'NUM022-1', 'SET059-7', 'GRP585-1',
             'GRP510-1', 'GRP412-1', 'LCL109-1', 'SET643+3', 'SET903+1', 'SET045+1', 'KLE069+1', 'SET516-6', 'SET073-6',

@@ -4,7 +4,7 @@ import datetime
 import argparse
 
 from TPTP_train_val_files import get_TPTP_test_files, get_TPTP_train_files, convert_to_absolute_path, \
-    get_TPTP_test_small, get_TPTP_train_small
+    get_TPTP_test_small, get_TPTP_train_small, get_TPTP_clause_test_files
 from CNN_embedder_network import CNNEmbedder
 from Comb_network import CombNetwork
 from data_loader import ClauseLoader
@@ -17,7 +17,8 @@ from model_trainer import ModelTrainer
 class EmbeddingTrainer:
     def __init__(self, model_trainer, batch_size=1024, embedding_size=1024, iterations=100000,
                  val_steps=1000, save_steps=1000, checkpoint_dir='CNN_Embedder', model_name='CNNEmbedder',
-                 summary_dir='logs', val_batch_number=20, lr=0.00001, loading_model=False, load_vocab=False):
+                 summary_dir='logs', val_batch_number=20, lr=0.00001, loading_model=False, load_vocab=False,
+                 test_steps=-1):
 
         assert issubclass(type(model_trainer),
                           ModelTrainer), "Parameter model_trainer has to be a model_trainer.ModelTrainer"
@@ -49,6 +50,8 @@ class EmbeddingTrainer:
             os.makedirs(checkpoint_dir)
         self.model_name = model_name
         self.summary_dir = summary_dir
+        self.test_folder = None
+        self.test_steps = test_steps
 
         self.model = self.model_trainer.create_model(batch_size, embedding_size)
 
@@ -81,6 +84,9 @@ class EmbeddingTrainer:
             timestamp = str(datetime.datetime.now()).replace("-", "_").replace(" ", "_").split('.')[0]
             train_writer = tf.summary.FileWriter(os.path.join(self.summary_dir, "train/" + timestamp), sess.graph)
             val_writer = tf.summary.FileWriter(os.path.join(self.summary_dir, "val/" + timestamp))
+            self.test_folder = os.path.join(self.summary_dir, "test/"+timestamp+"/")
+            if not os.path.exists(self.test_folder):
+                os.makedirs(self.test_folder)
 
             # TRAINING LOOP
             for training_step in range(1, self.training_iter):
@@ -92,6 +98,8 @@ class EmbeddingTrainer:
                     print("Validate model...")
                     val_summary_str = self.run_validation(sess)
                     val_writer.add_summary(val_summary_str, training_step)
+                if self.test_steps > 0 and training_step % self.test_steps == 0:
+                    self.run_test(sess, training_step)
 
                 start_time = time.time()
                 batch = self.model_trainer.get_train_batch(self.batch_size)
@@ -111,7 +119,7 @@ class EmbeddingTrainer:
     def run_validation(self, sess):
         avg_loss = np.zeros(shape=3, dtype=np.float32)
         for batch_index in range(self.val_batch_number):
-            batch = self.model_trainer.get_test_batch(self.batch_size)
+            batch = self.model_trainer.get_val_batch(self.batch_size)
             loss_all, loss_ones, loss_zeros = self.model_trainer.run_model(sess, self.model,
                                                                            [self.model.loss, self.model.loss_ones,
                                                                             self.model.loss_zeros], batch)
@@ -127,6 +135,23 @@ class EmbeddingTrainer:
         val_summary.value.add(tag="Test - Loss zeros", simple_value=avg_loss[2])
         return val_summary
 
+    def run_test(self, sess, training_step):
+        print("%" * 125)
+        print("TESTING MODEL...")
+        all_batches = self.model_trainer.get_test_batches(self.batch_size)
+        all_weights = []
+        i = 0
+        for batch in all_batches:
+            print("Test batch "+str(i))
+            i += 1
+            weights = self.model_trainer.run_model(sess, self.model, [self.model.weight], batch)
+            all_weights.append(weights[0])
+        s = self.model_trainer.process_test_batches(all_weights)
+        with open(os.path.join(self.test_folder, "test_file_"+str(training_step)+".txt"), 'w') as f:
+            f.write(s)
+        print("Finished testing model")
+        print("%" * 125)
+
     def create_summary(self):
         tf.summary.scalar('Loss', self.model.loss)
         tf.summary.scalar('Loss ones', self.model.loss_ones)
@@ -139,8 +164,10 @@ def start_training(args):
     modtr = CombLSTMTrainer(
         train_files=convert_to_absolute_path(args.path + "datasets/Cluster/Training/ClauseWeight_",
                                              get_TPTP_train_files() if not args.small_files else get_TPTP_train_small()),
+        val_files=convert_to_absolute_path(args.path + "datasets/Cluster/Training/ClauseWeight_",
+                                           get_TPTP_test_files() if not args.small_files else get_TPTP_test_small()),
         test_files=convert_to_absolute_path(args.path + "datasets/Cluster/Training/ClauseWeight_",
-                                            get_TPTP_test_files() if not args.small_files else get_TPTP_test_small()),
+                                            get_TPTP_clause_test_files()),
         num_proofs=args.num_proofs,
         num_training_clauses=args.num_training,
         num_initial_clauses=args.num_init,
@@ -150,7 +177,7 @@ def start_training(args):
     trainer = EmbeddingTrainer(model_trainer=modtr, checkpoint_dir="CNN_LSTM", model_name="CNN_LSTM",
                                val_batch_number=20, batch_size=256, val_steps=args.val_steps,
                                save_steps=args.save_steps, lr=0.00001, load_vocab=args.load_vocab,
-                               loading_model=args.load_model)
+                               loading_model=args.load_model, test_steps=2)
     trainer.run_training()
 
 

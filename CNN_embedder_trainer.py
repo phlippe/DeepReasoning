@@ -8,9 +8,9 @@ class CNNEmbedderTrainer(ModelTrainer):
 
     def __init__(self, train_files, test_files, use_wavenet=False):
         self.train_loader = ClauseLoader(file_list=train_files, prob_pos=0.5)
-        self.test_loader = ClauseLoader(file_list=test_files, augment=False)
+        self.val_loader = ClauseLoader(file_list=test_files, augment=False)
         self.train_loader.print_statistic()
-        self.test_loader.print_statistic()
+        self.val_loader.print_statistic()
 
         self.use_wavenet = use_wavenet
 
@@ -37,8 +37,14 @@ class CNNEmbedderTrainer(ModelTrainer):
     def get_train_batch(self, batch_size):
         return self.train_loader.get_batch(batch_size)
 
-    def get_test_batch(self, batch_size):
-        return self.test_loader.get_batch(batch_size)
+    def get_val_batch(self, batch_size):
+        return self.val_loader.get_batch(batch_size)
 
     def process_specific_loss_information(self, all_losses):
+        pass
+
+    def get_test_batches(self, batch_size):
+        return []
+
+    def process_test_batches(self, weights):
         pass
