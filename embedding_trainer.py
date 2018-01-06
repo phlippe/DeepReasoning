@@ -172,7 +172,10 @@ def start_training(args):
         num_training_clauses=args.num_training,
         num_initial_clauses=args.num_init,
         num_shuffles=args.num_shuffles,
-        val_batch_number=20
+        val_batch_number=20,
+        use_wavenet=args.wavenet,
+        wavenet_blocks=args.wv_blocks,
+        wavenet_layers=args.wv_layers
     )
     trainer = EmbeddingTrainer(model_trainer=modtr, checkpoint_dir="CNN_LSTM", model_name="CNN_LSTM",
                                val_batch_number=20, batch_size=256, val_steps=args.val_steps,
@@ -203,6 +206,11 @@ if __name__ == '__main__':
     parser.add_argument('-lm', '--load_model', action="store_true", help='If previous model should be loaded or not')
     parser.add_argument('-sf', '--small_files', action="store_true",
                         help='If only a small amount of files should be used for training and testing')
+    parser.add_argument('-w', '--wavenet', action="store_true", help='If embedding model should use wavenet layers')
+    parser.add_argument('-wl', '--wv_layers', default=2, type=int,
+                        help='If wavenet is chosen, the number of layers per block used')
+    parser.add_argument('-wb', '--wv_blocks', default=1, type=int,
+                        help='If wavenet is chosen, the number of blocks used')
 
     args = parser.parse_args()
 

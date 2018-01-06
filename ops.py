@@ -58,15 +58,16 @@ def dilated_conv2d(input_, output_dim,
       padding - Padding of convolution layer
     """
     with tf.variable_scope(name, reuse=reuse):
-        w = tf.get_variable('w', [k_h, k_w, input_.get_shape()[-1], output_dim],
+        input_shape = input_.get_shape().as_list()
+        w = tf.get_variable('w', [k_h, k_w, input_shape[-1], output_dim],
                             initializer=tf.contrib.layers.xavier_initializer())
         conv = tf.nn.atrous_conv2d(
             input_, w, rate=dilation_rate, padding=padding)
 
         biases = tf.get_variable('biases', [output_dim],
                                  initializer=tf.constant_initializer(0.0))
-        conv = tf.reshape(tf.nn.bias_add(conv, biases), conv.get_shape())
-
+        conv = tf.reshape(tf.nn.bias_add(conv, biases), shape=[input_shape[0], input_shape[1], -1, input_shape[3]])
+        #print("Dilated conv 2d: "+name+" -> Input shape: "+str(input_.get_shape().as_list())+", Conv shape: "+str(conv.get_shape().as_list()))
         return conv
 
 
@@ -107,7 +108,7 @@ def dilated_conv1d(input_, output_dim, k_w=3, dilation_rate=1,
 
     :return: Convolved input with shape [batch_size, 1, width, output_dim]
     """
-    input_shape = input_.get_shape()
+    input_shape = input_.get_shape().as_list()
     if len(input_shape) == 3:
         input_ = tf.reshape(input_, shape=(input_shape[0], 1, input_shape[1], input_shape[2]))
     return dilated_conv2d(input_=input_, output_dim=output_dim, k_h=1, k_w=k_w, dilation_rate=dilation_rate,
@@ -130,7 +131,7 @@ def wavenet_layer(input_, kernel_size=3, dilation_rate=1, name="WaveNet_Layer", 
     :return: Output of the combined layer with shape B1WC (B - Batch, W - Width, C - Channels) as input
     """
     with tf.variable_scope(name):
-        input_shape = input_.get_shape()
+        input_shape = input_.get_shape().as_list()
         channel_size = input_shape[-1]
         filter_layer = tf.nn.tanh(
             dilated_conv1d(input_=input_, output_dim=channel_size, k_w=kernel_size, dilation_rate=dilation_rate,
@@ -140,6 +141,30 @@ def wavenet_layer(input_, kernel_size=3, dilation_rate=1, name="WaveNet_Layer", 
                            name=name + "_gate", reuse=reuse))
         layer_d = filter_layer * gate_layer + input_
         return layer_d
+
+
+def hierarchical_wavenet_block(input_tensor, block_number, layer_number, kernel_size=3, dropout_rate=0.2, reuse=False,
+                               name="Hierarchical_WaveNet_Block"):
+    with tf.variable_scope(name):
+        block_tensor = None
+        for block_index in range(block_number):
+            with tf.variable_scope("Block_" + str(block_index)):
+                """
+                B(x) = x + (L_{64} * L_{32} * ... * L_{1})(D_{f}(x,p))
+                """
+                if block_index == 0:
+                    block_tensor = dropout(input_tensor, dropout_rate)
+                else:
+                    block_tensor = dropout(block_tensor, dropout_rate)
+                layer_tensor = block_tensor
+
+                for layer_index in range(layer_number):
+                    layer_tensor = wavenet_layer(input_=layer_tensor, kernel_size=kernel_size,
+                                                 dilation_rate=2 ** layer_index,
+                                                 name="WaveNetLayer_" + str(layer_index), reuse=reuse)
+                    print("(Block "+str(block_index)+", Layer "+str(layer_index)+") -> Layer tensor shape: "+str(layer_tensor.get_shape().as_list()))
+                block_tensor = block_tensor + layer_tensor
+        return block_tensor
 
 
 def dropout(input_, p):
@@ -267,7 +292,7 @@ def weighted_BCE_loss(predictions, labels, weight0=1, weight1=1):
 
 def log_loss_function(value):
     epsilon = tf.constant(1e-5, dtype=tf.float32, name="epsilon")
-    return tf.log(value + epsilon)
+    return tf.log(tf.pow(value, 1.5) + epsilon)
 
 
 def shortened_loss_function(value):

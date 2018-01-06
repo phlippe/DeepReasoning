@@ -8,7 +8,7 @@ FC_LAYER_2 = "Comb_final"
 
 class CombLSTMNetwork:
     def __init__(self, comb_features=1024, num_init_clauses=32, num_proof=4, num_train_clauses=32, num_shuffles=4,
-                 weight0=1, weight1=1, name="CombLSTMNet"):
+                 weight0=1, weight1=1, name="CombLSTMNet", use_wavenet=False, wavenet_blocks=1, wavenet_layers=2):
 
         assert comb_features > 0, "Number of channels for first layer has to be greater than 0!"
 
@@ -23,6 +23,9 @@ class CombLSTMNetwork:
         self.embedding_size = 1024
         self.weight0 = weight0
         self.weight1 = weight1
+        self.use_wavenet = use_wavenet
+        self.wavenet_blocks = wavenet_blocks
+        self.wavenet_layers = wavenet_layers
         self.labels = None
         self.weight = None
         self.loss = None
@@ -74,19 +77,21 @@ class CombLSTMNetwork:
 
     def repeat_lstm_states(self, state):
         rep_factor = int(self.num_train_clauses / self.num_shuffles)
+        print("Repeat factor: " + str(rep_factor))
+        print("Hidden states: " + str(state[0].get_shape().as_list()))
+        print("Current states: " + str(state[1].get_shape().as_list()))
         repeated_hidden_states = CombLSTMNetwork.repeat_tensor(tensor_to_repeat=state[0], axis=0, times=rep_factor)
         repeated_current_states = CombLSTMNetwork.repeat_tensor(tensor_to_repeat=state[1], axis=0, times=rep_factor)
-        # print("Repeat factor: " + str(rep_factor))
-        # print("Hidden states: " + str(state[0].get_shape().as_list()))
-        # print("Current states: " + str(state[1].get_shape().as_list()))
-        # print("Repeated hidden states: " + str(repeated_hidden_states.get_shape().as_list()))
-        # print("Repeated current states: " + str(repeated_current_states.get_shape().as_list()))
+        print("Repeated hidden states: " + str(repeated_hidden_states.get_shape().as_list()))
+        print("Repeated current states: " + str(repeated_current_states.get_shape().as_list()))
         return [repeated_hidden_states, repeated_current_states]
 
     def embed_clauses(self):
         self.clause_embedder = CNNEmbedder(embedding_size=self.embedding_size, name="ClauseEmbedder",
                                            batch_size=self.batch_size + self.num_init_clauses * self.num_proof,
-                                           char_number=None, use_wavenet=False, tensor_height=1, use_batch_norm=False)
+                                           char_number=None, use_wavenet_blocks=self.use_wavenet, tensor_height=1,
+                                           use_batch_norm=False, wavenet_blocks=self.wavenet_blocks,
+                                           wavenet_layers=self.wavenet_layers)
         # Squeeze so that LSTMs can run with fully connected layers
         all_clauses = tf.split(tf.squeeze(self.clause_embedder.embedded_vector), num_or_size_splits=2, axis=0)
         self.train_clauses = all_clauses[0]
@@ -215,7 +220,9 @@ class CombLSTMNetwork:
     def embed_neg_conjecture(self):
         self.neg_conjecture_embedder = CNNEmbedder(embedding_size=self.embedding_size, name="NegConjectureEmbedder",
                                                    reuse_vocab=True, batch_size=self.num_proof, char_number=None,
-                                                   use_wavenet=False, tensor_height=1, use_batch_norm=False)
+                                                   use_wavenet_blocks=self.use_wavenet, tensor_height=1,
+                                                   use_batch_norm=False, wavenet_blocks=self.wavenet_blocks,
+                                                   wavenet_layers=self.wavenet_layers)
         # Squeeze so that LSTMs can run with fully connected layers
         self.neg_conj_embedded = tf.squeeze(self.neg_conjecture_embedder.embedded_vector)
 

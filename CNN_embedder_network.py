@@ -5,11 +5,11 @@ import numpy as np
 from ops import *
 
 
-# TODO: Split embedding in two tensor parts: First type (variable, special character, function - arity)
 class CNNEmbedder:
     def __init__(self, embedding_size, layer_number=3, channel_size=-1, kernel_size=5, batch_size=1, input_channels=-1,
                  char_number=50, name="CNNEmbedder", reuse_vocab=False, tensor_height=1, use_wavenet=False,
-                 reuse_weights=False, use_batch_norm=False):
+                 reuse_weights=False, use_batch_norm=False,
+                 use_wavenet_blocks=False, wavenet_blocks=1, wavenet_layers=2):
 
         assert layer_number > 0, "Number of layers can not be negative nor 0"
         assert embedding_size > 0, "The embedding size can not be negative nor 0"
@@ -33,6 +33,9 @@ class CNNEmbedder:
         self.char_number = char_number
         self.tensor_height = tensor_height
         self.use_wavenet = use_wavenet
+        self.use_wavenet_blocks = use_wavenet_blocks
+        self.wavenet_blocks = wavenet_blocks
+        self.wavenet_layers = wavenet_layers
         self.reuse_weights = reuse_weights
         self.use_batch_norm = use_batch_norm
 
@@ -69,7 +72,7 @@ class CNNEmbedder:
             input_tensor = tf.reshape(tensor=input_tensor,
                                       shape=[self.batch_size, self.tensor_height, -1, self.channel_size])
 
-            if not self.use_wavenet:
+            if not self.use_wavenet and not self.use_wavenet_blocks:
                 first_layer = conv1d(input_=input_tensor, output_dim=self.channel_size, kernel_size=self.kernel_size,
                                      name=self.name + "_Conv1", relu=True, use_batch_norm=self.use_batch_norm,
                                      reuse=self.reuse_weights)
@@ -79,14 +82,20 @@ class CNNEmbedder:
                 final_layer = conv1d(input_=second_layer, output_dim=self.embedding_size, kernel_size=self.kernel_size,
                                      name=self.name + "_Conv3", relu=True, use_batch_norm=self.use_batch_norm,
                                      reuse=self.reuse_weights)
-            else:
+            elif self.use_wavenet and not self.use_wavenet_blocks:
                 first_layer = wavenet_layer(input_=input_tensor, kernel_size=self.kernel_size, dilation_rate=1,
                                             name=self.name + "_Conv1", reuse=self.reuse_weights)
                 second_layer = wavenet_layer(input_=first_layer, kernel_size=self.kernel_size, dilation_rate=2,
                                              name=self.name + "_Conv2", reuse=self.reuse_weights)
                 final_layer = wavenet_layer(input_=second_layer, kernel_size=self.kernel_size, dilation_rate=1,
                                             name=self.name + "_Conv3", reuse=self.reuse_weights)
-
+            else:
+                print("Input tensor shape: "+str(input_tensor.get_shape().as_list()))
+                final_layer = hierarchical_wavenet_block(input_tensor=input_tensor, block_number=self.wavenet_blocks,
+                                                         layer_number=self.wavenet_layers,
+                                                         kernel_size=3, dropout_rate=0.2, reuse=self.reuse_weights,
+                                                         name=self.name + "_Wavenet_Block")
+                print("Final layer shape: "+str(final_layer.get_shape().as_list()))
             self.channel_max_pool(final_layer)
 
     def channel_max_pool(self, final_layer):

@@ -8,7 +8,8 @@ import numpy as np
 
 class CombLSTMTrainer(ModelTrainer):
     def __init__(self, train_files, val_files, test_files, num_proofs, num_initial_clauses, num_training_clauses,
-                 num_shuffles, val_batch_number, prob_pos=0.3, loss_filter_size=64):
+                 num_shuffles, val_batch_number, prob_pos=0.25, loss_filter_size=64, use_wavenet=False,
+                 wavenet_blocks=1, wavenet_layers=2):
         self.val_batch_number = val_batch_number
         self.val_batches = []
         self.val_index = 0
@@ -19,6 +20,9 @@ class CombLSTMTrainer(ModelTrainer):
         self.batch_proofs = []
         self.last_losses = []
         self.loss_filter_size = loss_filter_size
+        self.use_wavenet = use_wavenet
+        self.wavenet_blocks = wavenet_blocks
+        self.wavenet_layers = wavenet_layers
 
         self.prob_pos = prob_pos
         self.train_loader = InitialClauseLoader(file_list=train_files, prob_pos=self.prob_pos)
@@ -36,7 +40,8 @@ class CombLSTMTrainer(ModelTrainer):
     def create_model(self, batch_size, embedding_size):
         combined_network = CombLSTMNetwork(num_proof=self.num_proofs, num_train_clauses=self.num_training_clauses,
                                            num_shuffles=self.num_shuffles, num_init_clauses=self.num_initial_clauses,
-                                           weight0=0.5 / self.prob_pos, weight1=1) #0.5 / (1 - self.prob_pos)
+                                           weight0=1, weight1=1.1, use_wavenet=self.use_wavenet,
+                                           wavenet_blocks=self.wavenet_blocks, wavenet_layers=self.wavenet_layers)
         return combined_network
 
     def run_model(self, sess, model, fetches, batch):
