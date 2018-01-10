@@ -5,7 +5,7 @@ import argparse
 
 from TPTP_train_val_files import get_TPTP_test_files, get_TPTP_train_files, convert_to_absolute_path, \
     get_TPTP_test_small, get_TPTP_train_small, get_TPTP_clause_test_files
-from CNN_embedder_network import CNNEmbedder
+from CNN_embedder_network import CNNEmbedder, NetType
 from Comb_network import CombNetwork
 from data_loader import ClauseLoader
 from CNN_embedder_trainer import CNNEmbedderTrainer
@@ -161,6 +161,12 @@ class EmbeddingTrainer:
 
 
 def start_training(args):
+    net_type = NetType.STANDARD
+    if args.wavenet:
+        net_type = NetType.WAVENET_BLOCKS
+    elif args.dense:
+        net_type = NetType.DILATED_DENSE_BLOCK
+
     modtr = CombLSTMTrainer(
         train_files=convert_to_absolute_path(args.path + "datasets/Cluster/Training/ClauseWeight_",
                                              get_TPTP_train_files() if not args.small_files else get_TPTP_train_small()),
@@ -173,7 +179,7 @@ def start_training(args):
         num_initial_clauses=args.num_init,
         num_shuffles=args.num_shuffles,
         val_batch_number=20,
-        use_wavenet=args.wavenet,
+        embedding_net_type=net_type,
         wavenet_blocks=args.wv_blocks,
         wavenet_layers=args.wv_layers
     )
@@ -207,6 +213,7 @@ if __name__ == '__main__':
     parser.add_argument('-sf', '--small_files', action="store_true",
                         help='If only a small amount of files should be used for training and testing')
     parser.add_argument('-w', '--wavenet', action="store_true", help='If embedding model should use wavenet layers')
+    parser.add_argument('-db', '--dense', action="store_true", help='If embedding model should use a dilated dense block')
     parser.add_argument('-wl', '--wv_layers', default=2, type=int,
                         help='If wavenet is chosen, the number of layers per block used')
     parser.add_argument('-wb', '--wv_blocks', default=1, type=int,

@@ -167,6 +167,28 @@ def hierarchical_wavenet_block(input_tensor, block_number, layer_number, kernel_
         return block_tensor
 
 
+def dilated_dense_block(input_tensor, layer_number, kernel_size=3, channel_size=-1, end_channels=-1, reuse=False,
+                        name="DilatedDenseBlock"):
+    if channel_size <= 0:
+        channel_size = input_tensor.get_shape().as_list()[-1]
+    if end_channels <= 0:
+        end_channels = channel_size
+    all_layers = [input_tensor]
+    output_tensor = input_tensor
+    with tf.variable_scope(name):
+        for layer_index in range(layer_number):
+            with tf.name_scope("DilConv"+str(layer_index)):
+                layer_out = tf.nn.relu(dilated_conv1d(input_=output_tensor, output_dim=channel_size, k_w=kernel_size,
+                                                      dilation_rate=2 ** layer_index, name="DilConv"+str(layer_index),
+                                                      reuse=reuse), name="RELU_"+str(layer_index))
+            all_layers.append(layer_out)
+            with tf.name_scope("FeatureReduction_"+str(layer_index)):
+                output_tensor = tf.nn.relu(conv1d(input_=tf.concat(values=all_layers, axis=3, name="FeatureConcat"+str(layer_index)), kernel_size=1,
+                                                  output_dim=channel_size if layer_index + 1 < layer_number else end_channels,
+                                                  name="FeatureReduction_"+str(layer_index), reuse=reuse), name="RELU_"+str(layer_index))
+    return output_tensor
+
+
 def dropout(input_, p):
     """
     Dropout layer.

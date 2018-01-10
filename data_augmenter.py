@@ -6,6 +6,9 @@ from CNN_embedder_network import CNNEmbedder
 
 
 class DefaultAugmenter:
+    def __init__(self):
+        pass
+
     def augment_clause(self, clause):
         return clause
 

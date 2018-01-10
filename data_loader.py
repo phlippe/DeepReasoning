@@ -183,15 +183,15 @@ class ClauseLoader:
         for proof_file in file_list:
             print(proof_file)
             new_proof_loader = ProofExampleLoader(proof_file)
-            if len(new_proof_loader.get_negated_conjecture()) == 0 or (new_proof_loader.get_number_of_negatives() == 0 and new_proof_loader.get_number_of_positives() == 0):
+            if len(new_proof_loader.get_negated_conjecture()) == 0 or new_proof_loader.get_number_of_negatives() == 0 or new_proof_loader.get_number_of_positives() == 0:
                 print("Could not use this proof loader, no negatives and positives or no conjecture...")
-                problems[0] += 1
+                problems[0] = problems[0] + 1
             elif len(new_proof_loader.get_negated_conjecture()) > 150:
                 print("Too large negated conjecture. Will not be used...")
-                problems[1] += 1
+                problems[1] = problems[1] + 1
             elif new_proof_loader.get_number_init_clauses() == 0:
                 print("No init clauses provided...")
-                problems[2] += 1
+                problems[2] = problems[2] + 1
             else:
                 proof_loader.append(new_proof_loader)
                 if new_proof_loader.get_number_init_clauses() > 32:

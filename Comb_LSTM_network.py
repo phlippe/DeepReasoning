@@ -1,5 +1,5 @@
 from ops import *
-from CNN_embedder_network import CNNEmbedder
+from CNN_embedder_network import CNNEmbedder, NetType
 from random import shuffle
 
 FC_LAYER_1 = "Comb_1024"
@@ -7,10 +7,11 @@ FC_LAYER_2 = "Comb_final"
 
 
 class CombLSTMNetwork:
-    def __init__(self, comb_features=1024, num_init_clauses=32, num_proof=4, num_train_clauses=32, num_shuffles=4,
-                 weight0=1, weight1=1, name="CombLSTMNet", use_wavenet=False, wavenet_blocks=1, wavenet_layers=2):
+    def __init__(self, embedding_size=1024, num_init_clauses=32, num_proof=4, num_train_clauses=32, num_shuffles=4,
+                 weight0=1, weight1=1, name="CombLSTMNet", wavenet_blocks=1, wavenet_layers=2, comb_features=1024,
+                 embedding_net_type=NetType.STANDARD):
 
-        assert comb_features > 0, "Number of channels for first layer has to be greater than 0!"
+        assert embedding_size > 0, "Number of channels for first layer has to be greater than 0!"
 
         self.num_init_clauses = num_init_clauses
         self.num_proof = num_proof
@@ -20,12 +21,12 @@ class CombLSTMNetwork:
         self.comb_features = comb_features
         self.name = name
         self.tensor_height = 1
-        self.embedding_size = 1024
+        self.embedding_size = embedding_size
         self.weight0 = weight0
         self.weight1 = weight1
-        self.use_wavenet = use_wavenet
         self.wavenet_blocks = wavenet_blocks
         self.wavenet_layers = wavenet_layers
+        self.embedding_net_type = embedding_net_type
         self.labels = None
         self.weight = None
         self.loss = None
@@ -89,7 +90,7 @@ class CombLSTMNetwork:
     def embed_clauses(self):
         self.clause_embedder = CNNEmbedder(embedding_size=self.embedding_size, name="ClauseEmbedder",
                                            batch_size=self.batch_size + self.num_init_clauses * self.num_proof,
-                                           char_number=None, use_wavenet_blocks=self.use_wavenet, tensor_height=1,
+                                           char_number=None, net_type=self.embedding_net_type, tensor_height=1,
                                            use_batch_norm=False, wavenet_blocks=self.wavenet_blocks,
                                            wavenet_layers=self.wavenet_layers)
         # Squeeze so that LSTMs can run with fully connected layers
@@ -147,7 +148,7 @@ class CombLSTMNetwork:
                 init_clause_lstm_batch = tf.stack(values=splitted_init_clauses, axis=1)
                 init_clause_lstm_batch = tf.reshape(tensor=init_clause_lstm_batch,
                                                     shape=[self.num_init_clauses, self.num_proof * self.num_shuffles,
-                                                           self.embedding_size])
+                                                           self.comb_features])
                 # Split over time
                 time_batches = tf.unstack(value=init_clause_lstm_batch, axis=0)
 
@@ -220,7 +221,7 @@ class CombLSTMNetwork:
     def embed_neg_conjecture(self):
         self.neg_conjecture_embedder = CNNEmbedder(embedding_size=self.embedding_size, name="NegConjectureEmbedder",
                                                    reuse_vocab=True, batch_size=self.num_proof, char_number=None,
-                                                   use_wavenet_blocks=self.use_wavenet, tensor_height=1,
+                                                   net_type=self.embedding_net_type, tensor_height=1,
                                                    use_batch_norm=False, wavenet_blocks=self.wavenet_blocks,
                                                    wavenet_layers=self.wavenet_layers)
         # Squeeze so that LSTMs can run with fully connected layers

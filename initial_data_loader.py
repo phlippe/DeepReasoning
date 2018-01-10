@@ -102,7 +102,11 @@ class InitialClauseLoader:
             elif proof.get_number_of_positives() == 0:
                 pos_next = np.zeros(shape=num_training_clauses)
             else:
-                pos_next = np.random.choice(a=[0, 1], size=num_training_clauses, p=[1 - self.prob_pos, self.prob_pos])
+                # pos_next = np.random.choice(a=[0, 1], size=num_training_clauses, p=[1 - self.prob_pos, self.prob_pos])
+                # No randomness, because it does not help the network and the loss function is optimized for exactly
+                # self.prob_pos*num_training_clauses positive clauses
+                pos_next = np.zeros(shape=num_training_clauses)
+                pos_next[:int(math.ceil(self.prob_pos*num_training_clauses))] = 1
             for c in range(num_training_clauses):
                 if pos_next[c] == 1:
                     training_clauses.append(proof.get_positive())
