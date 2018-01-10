@@ -6,9 +6,6 @@ import argparse
 from TPTP_train_val_files import get_TPTP_test_files, get_TPTP_train_files, convert_to_absolute_path, \
     get_TPTP_test_small, get_TPTP_train_small, get_TPTP_clause_test_files
 from CNN_embedder_network import CNNEmbedder, NetType
-from Comb_network import CombNetwork
-from data_loader import ClauseLoader
-from CNN_embedder_trainer import CNNEmbedderTrainer
 from Comb_LSTM_trainer import CombLSTMTrainer
 from ops import *
 from model_trainer import ModelTrainer
@@ -60,7 +57,13 @@ class EmbeddingTrainer:
             self.training_iter) + " iterations (validation every " + str(self.val_steps) + " steps)")
 
         saver = tf.train.Saver(max_to_keep=4)
-        optimizer = tf.train.AdamOptimizer(learning_rate=self.lr).minimize(self.model.loss)
+        global_step = tf.Variable(0, trainable=False)
+        learning_rate = tf.train.exponential_decay(learning_rate=self.lr,
+                                                   global_step=global_step,
+                                                   decay_steps=8000,
+                                                   decay_rate=0.1)
+        optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(self.model.loss,
+                                                                                 global_step=global_step)
 
         with tf.Session() as sess:
             sess.run(initialize_tf_variables())

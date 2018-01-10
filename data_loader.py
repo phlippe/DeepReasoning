@@ -179,6 +179,7 @@ class ClauseLoader:
     def initialize_proof_loader(file_list):
         problems = [0, 0, 0]
         large_inits = 0
+        easy_problems = 0
         proof_loader = []
         for proof_file in file_list:
             print(proof_file)
@@ -192,7 +193,11 @@ class ClauseLoader:
             elif new_proof_loader.get_number_init_clauses() == 0:
                 print("No init clauses provided...")
                 problems[2] = problems[2] + 1
+            elif new_proof_loader.get_number_of_negatives() < 10:
+                print("Less than 10 negative clauses. Might be too easy...")
+                easy_problems = easy_problems + 1
             else:
+                print("Add proof loader to data loader")
                 proof_loader.append(new_proof_loader)
                 if new_proof_loader.get_number_init_clauses() > 32:
                     large_inits += 1
@@ -202,6 +207,7 @@ class ClauseLoader:
         print("No neg/pos/neg_conj: "+str(problems[0]))
         print("Too large neg_conj: "+str(problems[1]))
         print("No init clauses: "+str(problems[2]))
+        print("Too less negatives: "+str(easy_problems))
         print("More init clauses than 32: "+str(large_inits))
         print("="*50)
 
