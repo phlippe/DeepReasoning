@@ -83,7 +83,7 @@ class DataAugmenter:
     @staticmethod
     def get_variables(vocab):
         var_list = []
-        for i in range(5):
+        for i in range(20):
             var = "X" + str(i + 1)
             var_list.append(vocab[var])
         return var_list

@@ -20,7 +20,8 @@ LABEL_NEGATIVE = 1
 
 
 class InitialClauseLoader:
-    def __init__(self, file_list, empty_char=5, augment=True, prob_pos=0.3, index_divider=32):
+    def __init__(self, file_list, empty_char=5, augment=True, prob_pos=0.3, index_divider=32, max_clause_len=150,
+                 max_neg_conj_len=-1):
         if augment:
             self.augmenter = DataAugmenter()
         else:
@@ -32,6 +33,11 @@ class InitialClauseLoader:
         self.proof_index = 0
         self.pos_next = True
         self.global_batch = None
+        self.max_clause_len = max_clause_len
+        if max_neg_conj_len <= 0:
+            self.max_neg_conj_len = self.max_clause_len
+        else:
+            self.max_neg_conj_len = max_neg_conj_len
 
         self.proof_loader = ClauseLoader.initialize_proof_loader([f for f in file_list if 'ClauseWeight_LCL' not in f])
 
@@ -130,12 +136,12 @@ class InitialClauseLoader:
             clause_batch[b, :batch_clause_length[b]] = np.array(batch_clauses[b])
         for b in range(num_proofs):
             neg_conj_batch[b, :batch_neg_conj_length[b]] = np.array(batch_neg_conj[b])
-        if max(batch_clause_length) > 150:
-            clause_batch = clause_batch[:, :150]
-            batch_clause_length = np.minimum(batch_clause_length, 150)
-        if max(batch_neg_conj_length) > 150:
-            neg_conj_batch = neg_conj_batch[:, :150]
-            batch_neg_conj_length = np.minimum(batch_neg_conj_length, 150)
+        if max(batch_clause_length) > self.max_clause_len:
+            clause_batch = clause_batch[:, :self.max_clause_len]
+            batch_clause_length = np.minimum(batch_clause_length, self.max_clause_len)
+        if max(batch_neg_conj_length) > self.max_neg_conj_len:
+            neg_conj_batch = neg_conj_batch[:, :self.max_neg_conj_len]
+            batch_neg_conj_length = np.minimum(batch_neg_conj_length, self.max_neg_conj_len)
         self.global_batch = [clause_batch, batch_clause_length, neg_conj_batch, batch_neg_conj_length,
                              init_clause_lengths, labels, proofs_chosen]
 

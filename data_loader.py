@@ -196,6 +196,7 @@ class ClauseLoader:
             elif new_proof_loader.get_number_of_negatives() < 10:
                 print("Less than 10 negative clauses. Might be too easy...")
                 easy_problems = easy_problems + 1
+                print("Easy problems: "+str(easy_problems))
             else:
                 print("Add proof loader to data loader")
                 proof_loader.append(new_proof_loader)

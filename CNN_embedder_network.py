@@ -106,9 +106,13 @@ class CNNEmbedder:
                                                          name=self.name + "_Wavenet_Block")
             elif self.net_type == NetType.DILATED_DENSE_BLOCK:
                 print("Build up dilated dense block...")
-                final_layer = dilated_dense_block(input_tensor=input_tensor, layer_number=5,
+                dense_layer = dilated_dense_block(input_tensor=input_tensor, layer_number=5,
                                                   channel_size=self.embedding_size, end_channels=2*self.embedding_size,
                                                   kernel_size=3)
+                # final 3x3 convolution without stride to support higher complexity for small clauses
+                final_layer = conv1d(input_=dense_layer, output_dim=2*self.embedding_size, kernel_size=3,
+                                     name="FinalLocalConv", relu=True, use_batch_norm=self.use_batch_norm,
+                                     reuse=self.reuse_weights)
             else:
                 print(" [!] ERROR: Unknown network type")
                 sys.exit(1)

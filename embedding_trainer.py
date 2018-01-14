@@ -1,21 +1,22 @@
-import numpy as np
-import time
-import datetime
 import argparse
+import datetime
+import time
 
+import numpy as np
+
+from CNN_embedder_network import NetType
+from Comb_LSTM_trainer import CombLSTMTrainer
 from TPTP_train_val_files import get_TPTP_test_files, get_TPTP_train_files, convert_to_absolute_path, \
     get_TPTP_test_small, get_TPTP_train_small, get_TPTP_clause_test_files
-from CNN_embedder_network import CNNEmbedder, NetType
-from Comb_LSTM_trainer import CombLSTMTrainer
-from ops import *
 from model_trainer import ModelTrainer
+from ops import *
 
 
 class EmbeddingTrainer:
     def __init__(self, model_trainer, batch_size=1024, embedding_size=1024, iterations=100000,
                  val_steps=1000, save_steps=1000, checkpoint_dir='CNN_Embedder', model_name='CNNEmbedder',
                  summary_dir='logs', val_batch_number=20, lr=0.00001, loading_model=False, load_vocab=False,
-                 test_steps=-1):
+                 test_steps=-1, lr_decay_steps=25000, lr_decay_rate=0.1):
 
         assert issubclass(type(model_trainer),
                           ModelTrainer), "Parameter model_trainer has to be a model_trainer.ModelTrainer"
@@ -39,6 +40,8 @@ class EmbeddingTrainer:
         self.batch_size = batch_size
         self.val_batch_number = val_batch_number
         self.lr = lr
+        self.lr_decay_steps = lr_decay_steps
+        self.lr_decay_rate = lr_decay_rate
         self.loading_model = loading_model
         self.load_vocab = load_vocab
 
@@ -60,8 +63,9 @@ class EmbeddingTrainer:
         global_step = tf.Variable(0, trainable=False)
         learning_rate = tf.train.exponential_decay(learning_rate=self.lr,
                                                    global_step=global_step,
-                                                   decay_steps=8000,
-                                                   decay_rate=0.1)
+                                                   decay_steps=self.lr_decay_steps,
+                                                   decay_rate=self.lr_decay_rate,
+                                                   staircase=True)
         optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(self.model.loss,
                                                                                  global_step=global_step)
 
@@ -87,7 +91,7 @@ class EmbeddingTrainer:
             timestamp = str(datetime.datetime.now()).replace("-", "_").replace(" ", "_").split('.')[0]
             train_writer = tf.summary.FileWriter(os.path.join(self.summary_dir, "train/" + timestamp), sess.graph)
             val_writer = tf.summary.FileWriter(os.path.join(self.summary_dir, "val/" + timestamp))
-            self.test_folder = os.path.join(self.summary_dir, "test/"+timestamp+"/")
+            self.test_folder = os.path.join(self.summary_dir, "test/" + timestamp + "/")
             if not os.path.exists(self.test_folder):
                 os.makedirs(self.test_folder)
 
@@ -114,9 +118,9 @@ class EmbeddingTrainer:
                 if training_step % 10 == 0:
                     train_writer.add_summary(sum_str, training_step)
                 print(
-                    "Iters: [%5d|%5d], time: %4.4f, clause size: %2d|%2d, loss: %.5f, loss ones:%.5f, loss zeros:%.5f" % (
-                        training_step, self.training_iter, time.time() - start_time, np.max(batch[1]), np.max(batch[3]),
-                        loss, loss_ones, loss_zeros))
+                        "Iters: [%5d|%5d], time: %4.4f, clause size: %2d|%2d, loss: %.5f, loss ones:%.5f, loss zeros:%.5f" % (
+                    training_step, self.training_iter, time.time() - start_time, np.max(batch[1]), np.max(batch[3]),
+                    loss, loss_ones, loss_zeros))
                 self.model_trainer.process_specific_loss_information(all_losses)
 
     def run_validation(self, sess):
@@ -145,12 +149,12 @@ class EmbeddingTrainer:
         all_weights = []
         i = 0
         for batch in all_batches:
-            print("Test batch "+str(i))
+            print("Test batch " + str(i))
             i += 1
             weights = self.model_trainer.run_model(sess, self.model, [self.model.weight], batch)
             all_weights.append(weights[0])
         s = self.model_trainer.process_test_batches(all_weights)
-        with open(os.path.join(self.test_folder, "test_file_"+str(training_step)+".txt"), 'w') as f:
+        with open(os.path.join(self.test_folder, "test_file_" + str(training_step) + ".txt"), 'w') as f:
             f.write(s)
         print("Finished testing model")
         print("%" * 125)
@@ -184,12 +188,16 @@ def start_training(args):
         val_batch_number=20,
         embedding_net_type=net_type,
         wavenet_blocks=args.wv_blocks,
-        wavenet_layers=args.wv_layers
+        wavenet_layers=args.wv_layers,
+        max_clause_len=args.max_clause_len,
+        max_neg_conj_len=args.max_neg_conj_len
     )
     trainer = EmbeddingTrainer(model_trainer=modtr, checkpoint_dir="CNN_LSTM", model_name="CNN_LSTM",
                                val_batch_number=20, batch_size=256, val_steps=args.val_steps,
                                save_steps=args.save_steps, lr=0.00001, load_vocab=args.load_vocab,
-                               loading_model=args.load_model, test_steps=args.test_steps)
+                               loading_model=args.load_model, test_steps=args.test_steps,
+                               lr_decay_rate=args.lr_decay_rate, lr_decay_steps=args.lr_decay_steps,
+                               iterations=args.iterations)
     trainer.run_training()
 
 
@@ -198,6 +206,8 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--path', default="/home/phillip/", help='Base path of datasets')
     parser.add_argument('-ns', '--num_shuffles', default=4, type=int,
                         help='Number of shuffles per proof for LSTM Network')
+    parser.add_argument('-iter', '--iterations', default=100000, type=int,
+                        help='Number of training iterations')
     parser.add_argument('-np', '--num_proofs', default=6, type=int, help='Number of proofs per batch for LSTM Network')
     parser.add_argument('-nt', '--num_training', default=32, type=int,
                         help='Number of training clauses per proof for LSTM Network')
@@ -216,11 +226,20 @@ if __name__ == '__main__':
     parser.add_argument('-sf', '--small_files', action="store_true",
                         help='If only a small amount of files should be used for training and testing')
     parser.add_argument('-w', '--wavenet', action="store_true", help='If embedding model should use wavenet layers')
-    parser.add_argument('-db', '--dense', action="store_true", help='If embedding model should use a dilated dense block')
+    parser.add_argument('-db', '--dense', action="store_true",
+                        help='If embedding model should use a dilated dense block')
     parser.add_argument('-wl', '--wv_layers', default=2, type=int,
                         help='If wavenet is chosen, the number of layers per block used')
     parser.add_argument('-wb', '--wv_blocks', default=1, type=int,
                         help='If wavenet is chosen, the number of blocks used')
+    parser.add_argument('-cl', '--max_clause_len', default=150, type=int,
+                        help='How many tokens a clause should have as maximum (otherwise will be cut)')
+    parser.add_argument('-ncl', '--max_neg_conj_len', default=150, type=int,
+                        help='How many tokens a negative conjecture should have as maximum (otherwise will be cut)')
+    parser.add_argument('-lrds', '--lr_decay_steps', default=25000, type=int,
+                        help='Number of steps after which the learning rate should be decayed by the decay rate (see --lr_decay_rate)')
+    parser.add_argument('-lrdr', '--lr_decay_rate', default=0.1, type=float,
+                        help='Decay rate by which the learning rate is reduced per decay steps (see --lr_decay_steps)')
 
     args = parser.parse_args()
 
