@@ -233,6 +233,7 @@ class CNNEmbedder:
 
     @staticmethod
     def get_vocabulary():
-        with open('Vocabs.txt', 'r') as inf:
+        VOCAB_FILE_NAME = "Conversion_vocab.txt"
+        with open(VOCAB_FILE_NAME, 'r') as inf:
             dict_from_file = eval(inf.read())
         return dict_from_file

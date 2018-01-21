@@ -5,6 +5,8 @@ from glob import glob
 import sys
 import numpy as np
 import math
+import json
+from CNN_embedder_network import CNNEmbedder
 
 from data_augmenter import DataAugmenter, DefaultAugmenter
 from TPTP_train_val_files import *
@@ -20,7 +22,7 @@ LABEL_NEGATIVE = 1
 
 
 class ProofExampleLoader:
-    def __init__(self, file_prefix):
+    def __init__(self, file_prefix, use_conversion=True):
         self.pos_examples = []
         self.neg_examples = []
         self.init_clauses = []
@@ -30,6 +32,12 @@ class ProofExampleLoader:
         self.pos_index = 0
         self.neg_index = 0
         self.prefix = file_prefix
+        self.all_vocabs = None
+        self.base_vocab = None
+        self.vocabs_by_arity = None
+        self.vocab_conversion_dict = None
+        self.active_conversion = None
+        self.use_conversion = use_conversion
 
         self.pos_examples = ProofExampleLoader.read_file(file_prefix, "pos")
         self.neg_examples = ProofExampleLoader.read_file(file_prefix, "neg")
@@ -51,7 +59,7 @@ class ProofExampleLoader:
                             self.neg_conjecture = self.neg_conjecture + [int(i) for i in line]
                             c += 1
                         except ValueError as e:
-                            print("[!] ERROR CONJ: "+e.message)
+                            print("[!] ERROR CONJ: "+str(e))
                             self.neg_conjecture = last_conj
                     elif "6" not in line:
                         print("[!] WARNING: Conjecture line without \"not\" removed: "+str(line))
@@ -62,8 +70,15 @@ class ProofExampleLoader:
                         print("[!] WARNING: Using last line of conjecture: "+str(line))
                         self.neg_conjecture = self.neg_conjecture + [int(i) for i in line]
         except IOError as e:
-            print("[!] ERROR CONJ: "+e.message)
+            print("[!] ERROR CONJ: "+str(e))
             self.neg_conjecture = []
+
+        if self.use_conversion:
+            try:
+                self.analyse_vocab()
+                self.shuffle_conversion()
+            except IndexError as e:
+                print("[!] ERROR CONVERSION: "+str(e))
 
     @staticmethod
     def read_file(file_prefix, file_postfix):
@@ -76,7 +91,7 @@ class ProofExampleLoader:
                         line = [int(i) for i in line]
                         all_lines.append(line)
                     except ValueError as e:
-                        print("[!] ERROR "+file_postfix.upper()+": "+e.message)
+                        print("[!] ERROR "+file_postfix.upper()+": "+str(e))
         return all_lines
 
     def permute_positives(self):
@@ -91,6 +106,8 @@ class ProofExampleLoader:
         if self.pos_index >= len(self.pos_examples):
             self.permute_positives()
         c = self.pos_examples[self.pos_index]
+        if self.use_conversion:
+            c = [self.active_conversion[voc] for voc in c]
         self.pos_index += 1
         return c
 
@@ -98,21 +115,29 @@ class ProofExampleLoader:
         if self.neg_index >= len(self.neg_examples):
             self.permute_negatives()
         c = self.neg_examples[self.neg_index]
+        if self.use_conversion:
+            c = [self.active_conversion[voc] for voc in c]
         self.neg_index += 1
         return c
 
     def get_init_clauses(self, size):
         shuffle(self.init_clauses)
         if len(self.init_clauses) >= size:
-            return self.init_clauses[:size]
+            all_inits = self.init_clauses[:size]
         else:
-            return self.init_clauses + [[5, 5, 5, 5, 5] for _ in range(size - len(self.init_clauses))]
+            all_inits = self.init_clauses + [[5, 5, 5, 5, 5] for _ in range(size - len(self.init_clauses))]
+        if self.use_conversion:
+            all_inits = [[self.active_conversion[voc] for voc in clause] for clause in all_inits]
+        return all_inits
 
     def get_number_init_clauses(self):
         return len(self.init_clauses)
 
     def get_negated_conjecture(self):
-        return self.neg_conjecture
+        neg_conj = self.neg_conjecture
+        if self.use_conversion:
+            neg_conj = [self.active_conversion[voc] for voc in neg_conj]
+        return neg_conj
 
     def get_number_of_positives(self):
         return len(self.pos_examples)
@@ -136,6 +161,62 @@ class ProofExampleLoader:
         pos_dict = OrderedDict(sorted((x, pos_length.count(x)) for x in set(pos_length)))
         neg_dict = OrderedDict(sorted((x, neg_length.count(x)) for x in set(neg_length)))
         return [pos_dict, neg_dict]
+
+    def analyse_vocab(self):
+        all_pos_vocabs = np.unique(np.array([c for clause in self.pos_examples for c in clause]))
+        all_neg_vocabs = np.unique(np.array([c for clause in self.neg_examples for c in clause]))
+        all_init_vocabs = np.unique(np.array([c for clause in self.init_clauses for c in clause]))
+        all_neg_conj_vocabs = np.unique(np.array(self.neg_conjecture))
+        self.all_vocabs = list(np.unique(np.concatenate([all_pos_vocabs, all_neg_vocabs, all_init_vocabs, all_neg_conj_vocabs], axis=0)))
+
+        with open("Vocabs.txt", 'r') as vocab_file:
+            base_vocab = json.load(vocab_file)
+        self.base_vocab = {v: k for k, v in base_vocab.items()}
+
+        self.vocabs_by_arity = dict()
+        for voc in self.all_vocabs:
+            arity = CNNEmbedder.get_arity_from_vocab(self.base_vocab[voc])
+            if arity >= -1:
+                if arity not in self.vocabs_by_arity:
+                    self.vocabs_by_arity[arity] = list()
+                self.vocabs_by_arity[arity].append(voc)
+
+        with open("Conversion_vocab.txt") as f:
+            conv_dict = json.load(f)
+        self.vocab_conversion_dict = dict()
+        for voc_name, voc_id in conv_dict.items():
+            arity = CNNEmbedder.get_arity_from_vocab(voc_name)
+            if arity >= -1:
+                if arity not in self.vocab_conversion_dict:
+                    self.vocab_conversion_dict[arity] = list()
+                self.vocab_conversion_dict[arity].append(voc_id)
+
+        self.active_conversion = dict()
+        self.active_conversion[base_vocab[" "]] = conv_dict[" "]
+        for voc in self.all_vocabs:
+            arity = CNNEmbedder.get_arity_from_vocab(self.base_vocab[voc])
+            if arity < -1:
+                voc_name = self.base_vocab[voc]
+                conv_id = conv_dict[voc_name]
+                self.active_conversion[voc] = conv_id
+
+    def shuffle_conversion(self):
+        for arity, voc_list in self.vocab_conversion_dict.items():
+            if arity in self.vocabs_by_arity:
+                shuffle(voc_list)
+                for voc_index in range(len(self.vocabs_by_arity[arity])):
+                    self.active_conversion[self.vocabs_by_arity[arity][voc_index]] = voc_list[voc_index]
+
+    def get_arity_distribution(self):
+        arity_dict = dict()
+        for voc in self.all_vocabs:
+            arity = CNNEmbedder.get_arity_from_vocab(self.base_vocab[voc])
+            if arity in arity_dict:
+                arity_dict[arity] += 1
+            else:
+                arity_dict[arity] = 1
+        # print("My arity dict: "+str(arity_dict))
+        return arity_dict
 
 
 def get_clause_lengths(conj_list):
@@ -183,7 +264,7 @@ class ClauseLoader:
         proof_loader = []
         for proof_file in file_list:
             print(proof_file)
-            new_proof_loader = ProofExampleLoader(proof_file)
+            new_proof_loader = ProofExampleLoader(proof_file, use_conversion=True)
             if len(new_proof_loader.get_negated_conjecture()) == 0 or new_proof_loader.get_number_of_negatives() == 0 or new_proof_loader.get_number_of_positives() == 0:
                 print("Could not use this proof loader, no negatives and positives or no conjecture...")
                 problems[0] = problems[0] + 1
@@ -193,10 +274,10 @@ class ClauseLoader:
             elif new_proof_loader.get_number_init_clauses() == 0:
                 print("No init clauses provided...")
                 problems[2] = problems[2] + 1
-            elif new_proof_loader.get_number_of_negatives() < 10:
-                print("Less than 10 negative clauses. Might be too easy...")
-                easy_problems = easy_problems + 1
-                print("Easy problems: "+str(easy_problems))
+            # elif new_proof_loader.get_number_of_negatives() < 10:
+            #     print("Less than 10 negative clauses. Might be too easy...")
+            #     easy_problems = easy_problems + 1
+            #     print("Easy problems: "+str(easy_problems))
             else:
                 print("Add proof loader to data loader")
                 proof_loader.append(new_proof_loader)
@@ -317,7 +398,6 @@ class ClauseLoader:
         return [f.rsplit('_', 1)[0] for f in all_files]
 
 
-
 # a = ClauseLoader(ClauseLoader.create_file_list_from_dir("/home/phillip/datasets/Cluster/Training/ClauseWeight"))
 # a.print_statistic()
 # print(a.proof_pos_indices)
@@ -326,6 +406,18 @@ class ClauseLoader:
 
 
 if __name__ == "__main__":
-    a = ClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_", get_TPTP_train_files()))
-    for loader in a.proof_loader:
-        print("Init clauses: "+str(loader.get_number_init_clauses()))
+    train_loader = ClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_", get_TPTP_train_files()))
+    val_loader = ClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_", get_TPTP_test_files()))
+    all_proof_loader = train_loader.proof_loader + val_loader.proof_loader
+    overall_vocab_use = dict()
+    for loader in all_proof_loader:
+        ar_dict = loader.get_arity_distribution()
+        for k, v in ar_dict.items():
+            if k in overall_vocab_use:
+                overall_vocab_use[k] = max(overall_vocab_use[k], v)
+            else:
+                overall_vocab_use[k] = v
+            if v > 100:
+                print("Found greater 100 ("+loader.prefix+")")
+    print("Number of loaders: "+str(len(all_proof_loader)))
+    print("Overall vocab dict: "+str(overall_vocab_use))

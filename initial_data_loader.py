@@ -96,6 +96,7 @@ class InitialClauseLoader:
         for p in range(num_proofs):
             proof_ind = self.get_proof()
             proof = self.proof_loader[proof_ind]
+            proof.shuffle_conversion()
             proofs_chosen.append(proof_ind)
             # Prepare initial clauses
             ic = proof.get_init_clauses(num_init_clauses)
@@ -162,22 +163,10 @@ class InitialClauseLoader:
 if __name__ == "__main__":
     a = InitialClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_",
                                                      get_TPTP_train_small()))
-    print(str(a.proof_indices))
-    print("Insert index 8")
-    a.add_proof_index(8)
-    print(str(a.proof_indices))
-    for _ in range(5):
-        print("Remove index 10")
-        a.remove_proof_index(10)
-        print(str(a.proof_indices))
-    print("Remove index 7")
-    a.remove_proof_index(7)
-    print(str(a.proof_indices))
-    # proof
-    # batch = a.get_batch(num_proofs=4, num_training_clauses=32, num_init_clauses=32)
-    # print("="*50+"\nClauses: "+str(batch[0].shape)+"\n"+str(batch[0]))
-    # print("="*50+"\nClauses length:"+str(batch[1].shape)+"\n"+str(batch[1]))
-    # print("="*50+"\nNegated conjecture: "+str(batch[2].shape)+"\n"+str(batch[2]))
+    batch = a.get_batch(num_proofs=4, num_training_clauses=32, num_init_clauses=32)
+    print("="*50+"\nClauses: "+str(batch[0].shape)+"\n"+str(batch[0]))
+    print("="*50+"\nClauses length:"+str(batch[1].shape)+"\n"+str(batch[1]))
+    print("="*50+"\nNegated conjecture: "+str(batch[2].shape)+"\n"+str(batch[2]))
     # print("="*50+"\nNegated conjecture length:"+str(batch[3].shape)+"\n"+str(batch[3]))
     # print("="*50+"\nInitial clause lengths: "+str(batch[4].shape)+"\n"+str(batch[4]))
     # print("="*50+"\nLabels:"+str(batch[5].shape)+"\n"+str(batch[5]))
