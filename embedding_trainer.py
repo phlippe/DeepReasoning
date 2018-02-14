@@ -127,6 +127,7 @@ class EmbeddingTrainer:
                                                  run_options=run_options, run_metadata=run_metadata)
                 if run_metadata is not None:
                     # Create the Timeline object, and write it to a json file
+                    train_writer.add_run_metadata(run_metadata, "step_"+str(training_step), training_step)
                     fetched_timeline = timeline.Timeline(run_metadata.step_stats)
                     chrome_trace = fetched_timeline.generate_chrome_trace_format()
                     with open('timeline_'+str(training_step).zfill(6)+'.json', 'w') as f:
@@ -203,16 +204,17 @@ def start_training(args):
         num_training_clauses=args.num_training,
         num_initial_clauses=args.num_init,
         num_shuffles=args.num_shuffles,
-        val_batch_number=20,
+        val_batch_number=50,
         embedding_net_type=net_type,
         wavenet_blocks=args.wv_blocks,
         wavenet_layers=args.wv_layers,
         max_clause_len=args.max_clause_len,
         max_neg_conj_len=args.max_neg_conj_len
     )
+    batch_size = int(args.num_proofs * (args.num_training + args.num_init))
     trainer = EmbeddingTrainer(model_trainer=modtr, checkpoint_dir="CNN_Dense", model_name="CNN_Dense",
-                               val_batch_number=20, batch_size=256, val_steps=args.val_steps,
-                               save_steps=args.save_steps, lr=0.00001, load_vocab=args.load_vocab,
+                               val_batch_number=50, batch_size=batch_size, val_steps=args.val_steps,
+                               save_steps=args.save_steps, lr=args.lr, load_vocab=args.load_vocab,
                                loading_model=args.load_model, test_steps=args.test_steps,
                                lr_decay_rate=args.lr_decay_rate, lr_decay_steps=args.lr_decay_steps,
                                iterations=args.iterations)

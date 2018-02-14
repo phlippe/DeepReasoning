@@ -67,7 +67,6 @@ def dilated_conv2d(input_, output_dim,
         biases = tf.get_variable('biases', [output_dim],
                                  initializer=tf.constant_initializer(0.0))
         conv = tf.reshape(tf.nn.bias_add(conv, biases), shape=[input_shape[0], input_shape[1], -1, input_shape[3]])
-        #print("Dilated conv 2d: "+name+" -> Input shape: "+str(input_.get_shape().as_list())+", Conv shape: "+str(conv.get_shape().as_list()))
         return conv
 
 
@@ -113,6 +112,39 @@ def dilated_conv1d(input_, output_dim, k_w=3, dilation_rate=1,
         input_ = tf.reshape(input_, shape=(input_shape[0], 1, input_shape[1], input_shape[2]))
     return dilated_conv2d(input_=input_, output_dim=output_dim, k_h=1, k_w=k_w, dilation_rate=dilation_rate,
                           name=name, reuse=reuse, padding=padding)
+
+
+def fast_dilated_conv1d(input_, output_dim, k_w=3, dilation_rate=1, name="fast_dilconv1d", reuse=False):
+    with tf.variable_scope(name):
+        if dilation_rate != 1:
+            input_shape = input_.get_shape().as_list()
+            if len(input_shape) == 3:
+                input_ = tf.expand_dims(input_, axis=1)
+
+            # Starting with shape [batch, 1, width, channels]
+            input_shape = tf.shape(input_)
+            input_shape_list = input_.get_shape().as_list()
+            # First fill up elements so that width is divisible by dilation
+            pad_elements = dilation_rate - 1 - tf.mod((input_shape[2] + dilation_rate - 1), dilation_rate)
+            input_ = tf.pad(input_, [[0, 0], [0, 0], [0, pad_elements], [0, 0]])
+            # Convert shape to [batch, width/dilation, dilation, channels]
+            # => over height dimension we have every dilation^th element
+            reshaped_input = tf.reshape(input_, shape=[input_shape_list[0],
+                                                       tf.cast(tf.divide(tf.shape(input_)[2], int(dilation_rate)), tf.int32),
+                                                       dilation_rate,
+                                                       input_shape_list[3]])
+            # Run a standard 1d-convolution over height(!)-dimension
+            out = conv2d(input_=reshaped_input, output_dim=output_dim, k_h=k_w, k_w=1, d_h=1, d_w=1, padding='SAME',
+                         reuse=reuse, relu=False, use_batch_norm=False, name=name)
+            # Reshape output back to original input shape
+            reshaped_output = tf.reshape(out, shape=[input_shape_list[0],
+                                                     1,
+                                                     tf.shape(input_)[2],
+                                                     input_shape_list[3]])
+            return reshaped_output[:, :, :input_shape[2], :]   # Cut out added elements
+        else:
+            return conv1d(input_=input_, output_dim=output_dim, kernel_size=k_w, d_h=1, d_w=1, reuse=reuse,
+                          relu=False, use_batch_norm=False, name=name)
 
 
 def wavenet_layer(input_, kernel_size=3, dilation_rate=1, name="WaveNet_Layer", reuse=False):
@@ -178,9 +210,12 @@ def dilated_dense_block(input_tensor, layer_number, kernel_size=3, channel_size=
     with tf.variable_scope(name):
         for layer_index in range(layer_number):
             with tf.name_scope("DilConv"+str(layer_index)):
-                layer_out = tf.nn.relu(dilated_conv1d(input_=output_tensor, output_dim=channel_size, k_w=kernel_size,
+                layer_out = tf.nn.relu(
+                                  fast_dilated_conv1d(input_=output_tensor, output_dim=channel_size, k_w=kernel_size,
                                                       dilation_rate=2 ** layer_index, name="DilConv"+str(layer_index),
-                                                      reuse=reuse), name="RELU_"+str(layer_index))
+                                                      reuse=reuse),
+                                  name="RELU_"+str(layer_index)
+                            )
                 layer_out = dropout(layer_out, dropout_rate, training)
             all_layers.append(layer_out)
             with tf.name_scope("FeatureReduction_"+str(layer_index)):
@@ -317,13 +352,13 @@ def weighted_BCE_loss(predictions, labels, weight0=1, weight1=1):
 
 def log_loss_function(value):
     epsilon = tf.constant(math.e**(-5), dtype=tf.float32, name="epsilon")
-    return (1-value)*tf.log(tf.pow(value, 1.5) + epsilon)
+    return tf.log(tf.pow(value, 1.5) + epsilon)     # *(1-value)
 
 
 def shortened_loss_function(value):
     # loss(0) = -1
     # loss(1) = 0
-    return (1-value)*tf.log(((1 + value * (math.e - 1)) / math.e))
+    return tf.log(((1 + value * (math.e - 1)) / math.e))    # *(1-value)
 
 
 def concat(values, axis, name="Concat"):

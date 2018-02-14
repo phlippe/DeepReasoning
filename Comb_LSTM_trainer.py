@@ -45,8 +45,8 @@ class CombLSTMTrainer(ModelTrainer):
                                            num_shuffles=self.num_shuffles, num_init_clauses=self.num_initial_clauses,
                                            weight0=1, weight1=1.1, embedding_net_type=self.embedding_net_type,
                                            wavenet_blocks=self.wavenet_blocks, wavenet_layers=self.wavenet_layers,
-                                           embedding_size=512, comb_features=1024, dropout_rate_embedder=0.5,
-                                           dropout_rate_fc=0.4)
+                                           embedding_size=512, comb_features=1024, dropout_rate_embedder=0.2,
+                                           dropout_rate_fc=0.1)
         return combined_network
 
     def run_model(self, sess, model, fetches, batch, is_training=True, run_options=None, run_metadata=None):

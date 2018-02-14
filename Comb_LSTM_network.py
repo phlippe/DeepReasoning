@@ -2,14 +2,15 @@ from ops import *
 from CNN_embedder_network import CNNEmbedder, NetType
 from random import shuffle
 
-FC_LAYER_1 = "Comb_1024"
-FC_LAYER_2 = "Comb_final"
+FC_LAYER_1 = "Comb_ClauseNegConj"
+FC_LAYER_2 = "Comb_InitMemory"
+FC_LAYER_3 = "Comb_final"
 
 
 class CombLSTMNetwork:
     def __init__(self, embedding_size=1024, num_init_clauses=32, num_proof=4, num_train_clauses=32, num_shuffles=4,
                  weight0=1, weight1=1, name="CombLSTMNet", wavenet_blocks=1, wavenet_layers=2, comb_features=1024,
-                 embedding_net_type=NetType.STANDARD, dropout_rate_embedder=0.2, dropout_rate_fc=0.2):
+                 embedding_net_type=NetType.STANDARD, dropout_rate_embedder=0.2, dropout_rate_fc=0.1):
 
         assert embedding_size > 0, "Number of channels for first layer has to be greater than 0!"
 
@@ -44,9 +45,9 @@ class CombLSTMNetwork:
         self.neg_conj_embedded = None
         self.init_clauses_length = None
         self.lstm_one = None
-        self.lstm_two = None
+        self.lstm_initial = None
         self.state_lstm_one = None
-        self.state_lstm_two = None
+        self.state_lstm_initial = None
         self.forward()
 
     def forward(self):
@@ -61,35 +62,37 @@ class CombLSTMNetwork:
             self.run_comb_layers()
 
     def run_comb_layers(self):
-        global FC_LAYER_2
+        global FC_LAYER_2, FC_LAYER_3
         with tf.name_scope("CombNetwork"):
-            lstm_one_output, temp_state = self.lstm_one(self.train_clauses,
-                                                        self.repeat_lstm_states(self.state_lstm_one))
-
             neg_conj_vector = self.repeat_tensor(tensor_to_repeat=self.neg_conj_embedded, axis=0,
                                                  times=self.num_train_clauses)
 
-            layer1 = self.first_combination_layer(lstm_one_output, neg_conj_vector, reuse=True)
-            layer1_dropout = dropout(layer1, self.dropout_rate_fc, training=self.is_training)
+            layer_comb = self.first_combination_layer(self.train_clauses, neg_conj_vector, reuse=True)
+            layer_comb_dropout = dropout(layer_comb, self.dropout_rate_fc, training=self.is_training)
 
-            lstm_two_output, temp_state = self.lstm_two(layer1_dropout, self.repeat_lstm_states(self.state_lstm_two))
-            lstm_two_output = dropout(lstm_two_output, self.dropout_rate_fc, training=self.is_training)
+            tensor_with_state = tf.concat(values=[layer_comb_dropout,
+                                                  self.repeat_lstm_states(self.state_lstm_initial)[0]],
+                                          axis=1)
+            layer_initial = fully_connected(input_=tensor_with_state, outputs=self.comb_features,
+                                            activation_fn=tf.nn.relu, reuse=False, name=FC_LAYER_2,
+                                            use_batch_norm=False)
+            layer_initial_dropout = dropout(layer_initial, self.dropout_rate_fc, training=self.is_training)
 
-            self.weight = fully_connected(input_=lstm_two_output, outputs=1, activation_fn=tf.nn.sigmoid, reuse=False,
-                                          name=FC_LAYER_2, use_batch_norm=False)
+            self.weight = fully_connected(input_=layer_initial_dropout, outputs=1, activation_fn=tf.nn.sigmoid,
+                                          reuse=False, name=FC_LAYER_3, use_batch_norm=False)
             self.weight = tf.squeeze(self.weight, name="CalcWeights")
             if self.tensor_height != 1:
                 self.weight = tf.reshape(tensor=self.weight, shape=[-1], name="ReshapeTo1D")
             self.loss, self.loss_ones, self.loss_zeros, self.all_losses = weighted_BCE_loss(self.weight, self.labels,
                                                                                             self.weight0, self.weight1)
 
-            self.add_feature_visualizations([(self.neg_conj_embedded[0, :], "FeatureNegConj")])
-            self.add_feature_visualizations([(self.train_clauses, "FeaturesClause"),
-                                             (lstm_one_output, "FeaturesClauseLSTM"),
-                                             (layer1, "FeaturesCombOne"),
-                                             (lstm_two_output, "FeaturesCombLSTM")],
-                                            indices=[(self.num_init_clauses, "Positive_"),
-                                                     (self.num_init_clauses+self.num_train_clauses/2, "Negative_")])
+            with tf.name_scope("SummaryVisu"):
+                self.add_feature_visualizations([(self.neg_conj_embedded[0, :], "FeatureNegConj")])
+                self.add_feature_visualizations([(self.train_clauses, "FeaturesClause"),
+                                                 (layer_comb, "FeaturesCombClauseNegConj"),
+                                                 (layer_initial, "FeaturesCombInitialMemory")],
+                                                indices=[(self.num_init_clauses, "Positive"),
+                                                         (self.num_init_clauses+self.num_train_clauses/2, "Negative")])
 
     def add_feature_visualizations(self, feature_tensor_tuples, scale_size=32, indices=None):
         if indices is None:
@@ -103,7 +106,7 @@ class CombLSTMNetwork:
                         self.visualize_feature_tensor(feature_tensor[tensor_index], name, scale_size)
 
     def visualize_feature_tensor(self, feature_tensor, name, scale_size):
-        image = tf.reshape(feature_tensor, shape=[1, int(scale_size), int(2 * self.embedding_size / scale_size), 1])
+        image = tf.reshape(feature_tensor, shape=[1, int(scale_size), int(self.comb_features / scale_size), 1])
         image = tf.tile(image, multiples=[1, 1, 1, 3])
         tf.summary.image(name=name,
                          tensor=image,
@@ -138,9 +141,17 @@ class CombLSTMNetwork:
         with tf.name_scope("InitialClauses"):
             self.init_clauses_length = tf.placeholder(dtype="int32", shape=[self.num_proof], name="InitClausesLength")
 
+            with tf.name_scope("FirstCombLayer"):
+                # Use output of first LSTM to determine the states of the second one
+                # Run through first fully connected layer
+                neg_conj_vector = self.repeat_tensor(tensor_to_repeat=self.neg_conj_embedded,
+                                                     times=self.num_init_clauses,
+                                                     axis=0)
+                comb_layer = self.first_combination_layer(self.init_clauses, neg_conj_vector, reuse=False)
+
             with tf.name_scope("ShuffleInitClauses"):
                 # Split clauses belonging to different proofs/negated conjectures
-                splitted_init_clauses = tf.split(value=self.init_clauses, num_or_size_splits=self.num_proof, axis=0)
+                splitted_init_clauses = tf.split(value=comb_layer, num_or_size_splits=self.num_proof, axis=0)
                 # Create randomly shuffled index matrices for all init clause lengths
                 shuffle_list = [CombLSTMNetwork.create_shuffle_tensor(self.num_init_clauses) for _ in
                                 range(self.num_shuffles)]
@@ -177,7 +188,31 @@ class CombLSTMNetwork:
                 splitted_init_clauses = [tensor for sublist in splitted_init_clauses for tensor in
                                          sublist]  # Flatten list
 
-            with tf.variable_scope("LSTM_ONE"):
+            # with tf.variable_scope("LSTM_ONE"):
+            #     # Prepare batch for LSTM. New shape: [Time, Proofs/Clauses, Clause-Features]
+            #     init_clause_lstm_batch = tf.stack(values=splitted_init_clauses, axis=1)
+            #     init_clause_lstm_batch = tf.reshape(tensor=init_clause_lstm_batch,
+            #                                         shape=[self.num_init_clauses, self.num_proof * self.num_shuffles,
+            #                                                self.comb_features])
+            #     # Split over time
+            #     time_batches = tf.unstack(value=init_clause_lstm_batch, axis=0)
+            #
+            #     # Create first LSTM and initialize states
+            #     self.lstm_one = tf.contrib.rnn.BasicLSTMCell(self.comb_features)
+            #     hidden_state_one = tf.zeros(shape=[self.num_proof * self.num_shuffles, self.comb_features])
+            #     current_state_one = tf.zeros(shape=[self.num_proof * self.num_shuffles, self.comb_features])
+            #     self.state_lstm_one = hidden_state_one, current_state_one
+            #
+            #     # Run LSTM over all time steps and save output
+            #     first_lstm_output = []
+            #     all_states = []
+            #     for batch in time_batches:
+            #         output, self.state_lstm_one = self.lstm_one(batch, self.tuple_to_lstm_state(self.state_lstm_one))
+            #         first_lstm_output.append(output)
+            #         all_states.append(self.state_lstm_one)
+            #     self.state_lstm_one = self.extract_states(all_states)
+
+            with tf.variable_scope("LSTM_INITIAL"):
                 # Prepare batch for LSTM. New shape: [Time, Proofs/Clauses, Clause-Features]
                 init_clause_lstm_batch = tf.stack(values=splitted_init_clauses, axis=1)
                 init_clause_lstm_batch = tf.reshape(tensor=init_clause_lstm_batch,
@@ -186,47 +221,17 @@ class CombLSTMNetwork:
                 # Split over time
                 time_batches = tf.unstack(value=init_clause_lstm_batch, axis=0)
 
-                # Create first LSTM and initialize states
-                self.lstm_one = tf.contrib.rnn.BasicLSTMCell(self.comb_features)
-                hidden_state_one = tf.zeros(shape=[self.num_proof * self.num_shuffles, self.comb_features])
-                current_state_one = tf.zeros(shape=[self.num_proof * self.num_shuffles, self.comb_features])
-                self.state_lstm_one = hidden_state_one, current_state_one
-
-                # Run LSTM over all time steps and save output
-                first_lstm_output = []
-                all_states = []
-                for batch in time_batches:
-                    output, self.state_lstm_one = self.lstm_one(batch, self.state_lstm_one)
-                    first_lstm_output.append(output)
-                    all_states.append(self.state_lstm_one)
-                self.state_lstm_one = self.extract_states(all_states)
-
-            with tf.name_scope("VectorPreparation"):
-                # Use output of first LSTM to determine the states of the second one
-                # Run through first fully connected layer
-                clause_vector = tf.concat(values=first_lstm_output, axis=0)
-                neg_conj_vector = self.repeat_tensor(tensor_to_repeat=self.neg_conj_embedded, times=self.num_shuffles,
-                                                     axis=0)
-                neg_conj_vector = tf.tile(neg_conj_vector, multiples=[self.num_init_clauses, 1])
-                # print("Clause vector: " + str(clause_vector.get_shape().as_list()))
-                # print("Neg Conj vector: " + str(neg_conj_vector.get_shape().as_list()))
-
-            comb_layer = self.first_combination_layer(clause_vector, neg_conj_vector, reuse=False)
-
-            with tf.variable_scope("LSTM_TWO"):
-                time_batches = tf.split(value=comb_layer, axis=0, num_or_size_splits=self.num_init_clauses)
-
-                self.lstm_two = tf.contrib.rnn.BasicLSTMCell(self.comb_features)
-                hidden_state_two = tf.zeros(shape=[self.num_proof * self.num_shuffles, self.comb_features])
-                current_state_two = tf.zeros(shape=[self.num_proof * self.num_shuffles, self.comb_features])
-                self.state_lstm_two = hidden_state_two, current_state_two
+                self.lstm_initial = tf.contrib.rnn.BasicLSTMCell(self.comb_features)
+                hidden_state_initial = tf.zeros(shape=[self.num_proof * self.num_shuffles, self.comb_features])
+                self.state_lstm_initial = hidden_state_initial, hidden_state_initial
 
                 # Run second LSTM over all time steps. Output will not be used anymore
                 all_states = []
                 for batch in time_batches:
-                    output, self.state_lstm_two = self.lstm_two(batch, self.state_lstm_two)
-                    all_states.append(self.state_lstm_two)
-                self.state_lstm_two = self.extract_states(all_states)
+                    _, self.state_lstm_initial = self.lstm_initial(batch,
+                                                                   self.tuple_to_lstm_state(self.state_lstm_initial))
+                    all_states.append(self.state_lstm_initial)
+                self.state_lstm_initial = self.extract_states(all_states)
 
     def extract_states(self, all_states):
         with tf.name_scope("ExtractStates"):
@@ -235,10 +240,11 @@ class CombLSTMNetwork:
             chosen_states_c = self.short_state_extraction(all_states, state_index=1)
             return [tf.stack(values=chosen_states_h, axis=0), tf.stack(values=chosen_states_c, axis=0)]
 
+    def tuple_to_lstm_state(self, state_tuple):
+        return state_tuple
+
     def short_state_extraction(self, all_states, state_index):
-        # print("All states size: " + str(len([a[state_index] for a in all_states])))
         state_tensor = tf.stack(values=[a[state_index] for a in all_states], axis=0)
-        # print("State tensor size: " + str(state_tensor.get_shape().as_list()))
         return [state_tensor[self.init_clauses_length[i_proof] - 1, i_proof * self.num_shuffles + i_shuffle, :]
                 for i_proof in range(self.num_proof) for i_shuffle in range(self.num_shuffles)]
 
