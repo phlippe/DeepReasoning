@@ -12,11 +12,14 @@ class NetType(Enum):
     WAVENET_BLOCKS = 2,
     DILATED_DENSE_BLOCK = 3
 
+GLOBAL_VOCAB = None
+GLOBAL_ARITIES = None
 
 class CNNEmbedder:
     def __init__(self, embedding_size, layer_number=3, channel_size=-1, kernel_size=5, batch_size=1, input_channels=-1,
                  char_number=50, name="CNNEmbedder", reuse_vocab=False, tensor_height=1, net_type=NetType.STANDARD,
-                 reuse_weights=False, use_batch_norm=False,  wavenet_blocks=1, wavenet_layers=2):
+                 reuse_weights=False, use_batch_norm=False,  wavenet_blocks=1, wavenet_layers=2, dropout_rate=0.5,
+                 is_training=False, max_pool_prop=0.8):
 
         assert layer_number > 0, "Number of layers can not be negative nor 0"
         assert embedding_size > 0, "The embedding size can not be negative nor 0"
@@ -45,6 +48,9 @@ class CNNEmbedder:
         self.wavenet_layers = wavenet_layers
         self.reuse_weights = reuse_weights
         self.use_batch_norm = use_batch_norm
+        self.dropout_rate = dropout_rate
+        self.is_training = is_training
+        self.max_pool_prop = max_pool_prop
 
         self.vocab_table = None
         self.arity_table = None
@@ -65,6 +71,7 @@ class CNNEmbedder:
                                                name="InputClause")
             self.input_length = tf.placeholder(dtype="int32",
                                                shape=[self.batch_size], name="InputClauseLength")
+
             embedded_vocabs = self.embed_input_clause()
             if IS_OLD_TENSORFLOW:
                 input_tensor = tf.pack(
@@ -108,11 +115,15 @@ class CNNEmbedder:
                 print("Build up dilated dense block...")
                 dense_layer = dilated_dense_block(input_tensor=input_tensor, layer_number=5,
                                                   channel_size=self.embedding_size, end_channels=2*self.embedding_size,
-                                                  kernel_size=3)
+                                                  kernel_size=3, training=self.is_training,
+                                                  dropout_rate=self.dropout_rate)
+
                 # final 3x3 convolution without stride to support higher complexity for small clauses
                 final_layer = conv1d(input_=dense_layer, output_dim=2*self.embedding_size, kernel_size=3,
-                                     name="FinalLocalConv", relu=True, use_batch_norm=self.use_batch_norm,
+                                     name="FinalLocalConv", relu=False, use_batch_norm=self.use_batch_norm,
                                      reuse=self.reuse_weights)
+                final_layer = tf.nn.tanh(final_layer)   # Normalizing input between -1 and 1
+
             else:
                 print(" [!] ERROR: Unknown network type")
                 sys.exit(1)
@@ -139,10 +150,15 @@ class CNNEmbedder:
                 single_clauses = tf.unstack(value=final_layer, axis=0)
                 self.embedded_vector = []
                 for c in range(len(single_clauses)):
-                    self.embedded_vector.append(
-                        tf.reduce_max(input_tensor=single_clauses[c][:, :self.input_length[c], :],
-                                      axis=1, keep_dims=True,
-                                      name=self.name + "_MaxPool_" + str(c)))
+                    current_clause = single_clauses[c][:, :self.input_length[c], :]
+                    max_feature = tf.reduce_max(input_tensor=current_clause,
+                                                axis=1, keep_dims=True,
+                                                name=self.name + "_MaxPool_" + str(c))
+                    mean_feature = tf.reduce_mean(input_tensor=current_clause,
+                                                  axis=1, keep_dims=True,
+                                                  name=self.name + "_MeanPool_" + str(c))
+                    combined_feature = self.max_pool_prop * max_feature + (1 - self.max_pool_prop) * mean_feature
+                    self.embedded_vector.append(combined_feature)
                 self.embedded_vector = tf.stack(values=self.embedded_vector, axis=0, name="EmbeddedVector")
 
     def embed_input_clause(self):
@@ -168,18 +184,47 @@ class CNNEmbedder:
         return random_length
 
     def create_lookup_table(self, reuse_vocab=False):
+        global GLOBAL_ARITIES, GLOBAL_VOCAB
         with tf.variable_scope("Vocabulary", reuse=reuse_vocab):
             vocab_values, keys, vocab_offset = self.get_vocab_values_keys()
             self.vocab_index_tensor, self.vocab_offset = self.create_index_vector()
             self.arity_index_tensor, max_arity = self.create_arity_vector()
 
-            self.vocab_table = tf.get_variable("Vocabs",
-                                               shape=[max(vocab_values) + vocab_offset, self.channel_size / 2],
-                                               dtype=tf.float32,
-                                               initializer=tf.contrib.layers.xavier_initializer())
-            self.arity_table = tf.get_variable("Arities", shape=[max_arity, self.channel_size / 2],
-                                               dtype=tf.float32,
-                                               initializer=tf.contrib.layers.xavier_initializer())
+            # self.vocab_table = tf.get_variable("Vocabs",
+            #                                    shape=[max(vocab_values) + vocab_offset, self.channel_size / 2],
+            #                                    dtype=tf.float32,
+            #                                    initializer=tf.contrib.layers.xavier_initializer())
+            # self.arity_table = tf.get_variable("Arities", shape=[max_arity, self.channel_size / 2],
+            #                                    dtype=tf.float32,
+            #                                    initializer=tf.contrib.layers.xavier_initializer())
+            # print(vocab_shape)
+            if reuse_vocab:
+                self.vocab_table = GLOBAL_VOCAB
+                self.arity_table = GLOBAL_ARITIES
+            else:
+                vocab_shape = [max(vocab_values) + vocab_offset, int(self.channel_size / 2)]
+
+                self.vocab_table = tf.Variable(initial_value=tf.random_uniform(shape=vocab_shape,
+                                                                               minval=-1.0,
+                                                                               maxval=1.0,
+                                                                               dtype=tf.float32),
+                                               trainable=True,
+                                               name="Vocabs",
+                                               expected_shape=vocab_shape,
+                                               dtype=tf.float32)
+
+                arity_shape = [max_arity, int(self.channel_size / 2)]
+                # print(arity_shape)
+                self.arity_table = tf.Variable(initial_value=tf.random_uniform(shape=arity_shape,
+                                                                               minval=-1.0,
+                                                                               maxval=1.0,
+                                                                               dtype=tf.float32),
+                                               trainable=True,
+                                               name="Arities",
+                                               expected_shape=arity_shape,
+                                               dtype=tf.float32)
+                GLOBAL_VOCAB = self.vocab_table
+                GLOBAL_ARITIES = self.arity_table
 
     def create_index_vector(self):
         fun_codes, _, fun_codes_offset = self.get_vocab_values_keys()
@@ -233,7 +278,7 @@ class CNNEmbedder:
 
     @staticmethod
     def get_vocabulary():
-        VOCAB_FILE_NAME = "Conversion_vocab.txt"
+        VOCAB_FILE_NAME = "Vocabs.txt"  #"Conversion_vocab.txt"
         with open(VOCAB_FILE_NAME, 'r') as inf:
             dict_from_file = eval(inf.read())
         return dict_from_file

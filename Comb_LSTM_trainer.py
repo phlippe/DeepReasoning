@@ -45,10 +45,11 @@ class CombLSTMTrainer(ModelTrainer):
                                            num_shuffles=self.num_shuffles, num_init_clauses=self.num_initial_clauses,
                                            weight0=1, weight1=1.1, embedding_net_type=self.embedding_net_type,
                                            wavenet_blocks=self.wavenet_blocks, wavenet_layers=self.wavenet_layers,
-                                           embedding_size=512, comb_features=1024)
+                                           embedding_size=512, comb_features=1024, dropout_rate_embedder=0.5,
+                                           dropout_rate_fc=0.4)
         return combined_network
 
-    def run_model(self, sess, model, fetches, batch):
+    def run_model(self, sess, model, fetches, batch, is_training=True, run_options=None, run_metadata=None):
         input_clause, input_clause_len, input_conj, input_conj_len, init_clause_len, labels = batch
         feed_dict = {
             model.clause_embedder.input_clause: input_clause,
@@ -56,9 +57,11 @@ class CombLSTMTrainer(ModelTrainer):
             model.clause_embedder.input_length: input_clause_len,
             model.neg_conjecture_embedder.input_length: input_conj_len,
             model.init_clauses_length: init_clause_len,
-            model.labels: labels
+            model.labels: labels,
+            model.is_training: is_training
         }
-        return sess.run(fetches, feed_dict=feed_dict)
+        # For timeline tracing
+        return sess.run(fetches, feed_dict=feed_dict, options=run_options, run_metadata=run_metadata)
 
     def get_train_batch(self, batch_size):
         batch = self.train_loader.get_batch(num_proofs=self.num_proofs, num_training_clauses=self.num_training_clauses,

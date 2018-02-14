@@ -16,14 +16,13 @@ class CNNEmbedderTrainer(ModelTrainer):
 
     def create_model(self, batch_size, embedding_size):
         clause_embedder = CNNEmbedder(embedding_size=embedding_size, name="ClauseEmbedder",
-                                      batch_size=batch_size, char_number=None, use_wavenet=self.use_wavenet)
+                                      batch_size=batch_size, char_number=None)
         neg_conjecture_embedder = CNNEmbedder(embedding_size=embedding_size, name="NegConjectureEmbedder",
-                                              reuse_vocab=True, batch_size=batch_size, char_number=None,
-                                              use_wavenet=self.use_wavenet)
+                                              reuse_vocab=True, batch_size=batch_size, char_number=None)
         combined_network = CombNetwork(clause_embedder, neg_conjecture_embedder, weight0=1, weight1=1)
         return combined_network
 
-    def run_model(self, sess, model, fetches, batch):
+    def run_model(self, sess, model, fetches, batch, is_training=True, run_options=None, run_metadata=None):
         input_clause, input_clause_len, input_conj, input_conj_len, labels = batch
         feed_dict = {
             model.clause_embedder.input_clause: input_clause,
@@ -32,7 +31,7 @@ class CNNEmbedderTrainer(ModelTrainer):
             model.neg_conjecture_embedder.input_length: input_conj_len,
             model.labels: labels
         }
-        return sess.run(fetches, feed_dict=feed_dict)
+        return sess.run(fetches, feed_dict=feed_dict, run_options=run_options, run_metadata=run_metadata)
 
     def get_train_batch(self, batch_size):
         return self.train_loader.get_batch(batch_size)

@@ -168,7 +168,7 @@ def hierarchical_wavenet_block(input_tensor, block_number, layer_number, kernel_
 
 
 def dilated_dense_block(input_tensor, layer_number, kernel_size=3, channel_size=-1, end_channels=-1, reuse=False,
-                        name="DilatedDenseBlock"):
+                        dropout_rate=0.5, training=False, name="DilatedDenseBlock"):
     if channel_size <= 0:
         channel_size = input_tensor.get_shape().as_list()[-1]
     if end_channels <= 0:
@@ -181,22 +181,25 @@ def dilated_dense_block(input_tensor, layer_number, kernel_size=3, channel_size=
                 layer_out = tf.nn.relu(dilated_conv1d(input_=output_tensor, output_dim=channel_size, k_w=kernel_size,
                                                       dilation_rate=2 ** layer_index, name="DilConv"+str(layer_index),
                                                       reuse=reuse), name="RELU_"+str(layer_index))
+                layer_out = dropout(layer_out, dropout_rate, training)
             all_layers.append(layer_out)
             with tf.name_scope("FeatureReduction_"+str(layer_index)):
                 output_tensor = tf.nn.relu(conv1d(input_=tf.concat(values=all_layers, axis=3, name="FeatureConcat"+str(layer_index)), kernel_size=1,
                                                   output_dim=channel_size if layer_index + 1 < layer_number else end_channels,
                                                   name="FeatureReduction_"+str(layer_index), reuse=reuse), name="RELU_"+str(layer_index))
+                output_tensor = dropout(output_tensor, dropout_rate, training)
     return output_tensor
 
 
-def dropout(input_, p):
+def dropout(input_, p, training=False):
     """
     Dropout layer.
     :param input_: Input to dropout
     :param p: Probability with which a node is set to zero
+    :param training: Whether the network is training or testing
     :return: Input with applied dropout
     """
-    return tf.nn.dropout(input_, p)
+    return tf.layers.dropout(inputs=input_, rate=p, training=training)
 
 
 def fully_connected(input_, outputs, activation_fn=tf.nn.relu, reuse=False, name="FC_Layer", use_batch_norm=False):
@@ -313,14 +316,14 @@ def weighted_BCE_loss(predictions, labels, weight0=1, weight1=1):
 
 
 def log_loss_function(value):
-    epsilon = tf.constant(1e-5, dtype=tf.float32, name="epsilon")
-    return tf.log(tf.pow(value, 1.5) + epsilon)
+    epsilon = tf.constant(math.e**(-5), dtype=tf.float32, name="epsilon")
+    return (1-value)*tf.log(tf.pow(value, 1.5) + epsilon)
 
 
 def shortened_loss_function(value):
     # loss(0) = -1
     # loss(1) = 0
-    return tf.log(((1 + value * (math.e - 1)) / math.e))
+    return (1-value)*tf.log(((1 + value * (math.e - 1)) / math.e))
 
 
 def concat(values, axis, name="Concat"):

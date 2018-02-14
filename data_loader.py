@@ -22,7 +22,7 @@ LABEL_NEGATIVE = 1
 
 
 class ProofExampleLoader:
-    def __init__(self, file_prefix, use_conversion=True):
+    def __init__(self, file_prefix=None, use_conversion=True):
         self.pos_examples = []
         self.neg_examples = []
         self.init_clauses = []
@@ -39,46 +39,47 @@ class ProofExampleLoader:
         self.active_conversion = None
         self.use_conversion = use_conversion
 
-        self.pos_examples = ProofExampleLoader.read_file(file_prefix, "pos")
-        self.neg_examples = ProofExampleLoader.read_file(file_prefix, "neg")
-        self.init_clauses = ProofExampleLoader.read_file(file_prefix, "init")
+        if file_prefix is not None:
+            self.pos_examples = ProofExampleLoader.read_file(file_prefix, "pos")
+            self.neg_examples = ProofExampleLoader.read_file(file_prefix, "neg")
+            self.init_clauses = ProofExampleLoader.read_file(file_prefix, "init")
 
-        try:
-            with open(file_prefix + "_conj.txt", "r") as f:
-                c = 0
-                last_line = None
-                for line in f:
-                    full_line = line
-                    line = line.split("\n")[0].split(",")
-                    if line and line[0] is not '\n' and not (full_line == last_line) and "6" in line:
-                        last_conj = self.neg_conjecture[:]
-                        try:
-                            if c > 0:
-                                self.neg_conjecture.append(2)  # Appending ,
-
-                            self.neg_conjecture = self.neg_conjecture + [int(i) for i in line]
-                            c += 1
-                        except ValueError as e:
-                            print("[!] ERROR CONJ: "+str(e))
-                            self.neg_conjecture = last_conj
-                    elif "6" not in line:
-                        print("[!] WARNING: Conjecture line without \"not\" removed: "+str(line))
-                    last_line = full_line
-                if len(self.neg_conjecture) == 0 and last_line is not None:
-                    line = last_line.split("\n")[0].split(",")
-                    if not (len(line) == 1 and line[0] == ''):
-                        print("[!] WARNING: Using last line of conjecture: "+str(line))
-                        self.neg_conjecture = self.neg_conjecture + [int(i) for i in line]
-        except IOError as e:
-            print("[!] ERROR CONJ: "+str(e))
-            self.neg_conjecture = []
-
-        if self.use_conversion:
             try:
-                self.analyse_vocab()
-                self.shuffle_conversion()
-            except IndexError as e:
-                print("[!] ERROR CONVERSION: "+str(e))
+                with open(file_prefix + "_conj.txt", "r") as f:
+                    c = 0
+                    last_line = None
+                    for line in f:
+                        full_line = line
+                        line = line.split("\n")[0].split(",")
+                        if line and line[0] is not '\n' and not (full_line == last_line) and "6" in line:
+                            last_conj = self.neg_conjecture[:]
+                            try:
+                                if c > 0:
+                                    self.neg_conjecture.append(2)  # Appending ,
+
+                                self.neg_conjecture = self.neg_conjecture + [int(i) for i in line]
+                                c += 1
+                            except ValueError as e:
+                                print("[!] ERROR CONJ: "+str(e))
+                                self.neg_conjecture = last_conj
+                        elif "6" not in line:
+                            print("[!] WARNING: Conjecture line without \"not\" removed: "+str(line))
+                        last_line = full_line
+                    if len(self.neg_conjecture) == 0 and last_line is not None:
+                        line = last_line.split("\n")[0].split(",")
+                        if not (len(line) == 1 and line[0] == ''):
+                            print("[!] WARNING: Using last line of conjecture: "+str(line))
+                            self.neg_conjecture = self.neg_conjecture + [int(i) for i in line]
+            except IOError as e:
+                print("[!] ERROR CONJ: "+str(e))
+                self.neg_conjecture = []
+
+            if self.use_conversion:
+                try:
+                    self.analyse_vocab()
+                    self.shuffle_conversion()
+                except IndexError as e:
+                    print("[!] ERROR CONVERSION: "+str(e))
 
     @staticmethod
     def read_file(file_prefix, file_postfix):
@@ -201,11 +202,12 @@ class ProofExampleLoader:
                 self.active_conversion[voc] = conv_id
 
     def shuffle_conversion(self):
-        for arity, voc_list in self.vocab_conversion_dict.items():
-            if arity in self.vocabs_by_arity:
-                shuffle(voc_list)
-                for voc_index in range(len(self.vocabs_by_arity[arity])):
-                    self.active_conversion[self.vocabs_by_arity[arity][voc_index]] = voc_list[voc_index]
+        if self.use_conversion:
+            for arity, voc_list in self.vocab_conversion_dict.items():
+                if arity in self.vocabs_by_arity:
+                    shuffle(voc_list)
+                    for voc_index in range(len(self.vocabs_by_arity[arity])):
+                        self.active_conversion[self.vocabs_by_arity[arity][voc_index]] = voc_list[voc_index]
 
     def get_arity_distribution(self):
         arity_dict = dict()
@@ -264,7 +266,7 @@ class ClauseLoader:
         proof_loader = []
         for proof_file in file_list:
             print(proof_file)
-            new_proof_loader = ProofExampleLoader(proof_file, use_conversion=True)
+            new_proof_loader = ProofExampleLoader(proof_file, use_conversion=False)
             if len(new_proof_loader.get_negated_conjecture()) == 0 or new_proof_loader.get_number_of_negatives() == 0 or new_proof_loader.get_number_of_positives() == 0:
                 print("Could not use this proof loader, no negatives and positives or no conjecture...")
                 problems[0] = problems[0] + 1

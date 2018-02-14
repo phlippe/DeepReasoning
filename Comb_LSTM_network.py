@@ -9,7 +9,7 @@ FC_LAYER_2 = "Comb_final"
 class CombLSTMNetwork:
     def __init__(self, embedding_size=1024, num_init_clauses=32, num_proof=4, num_train_clauses=32, num_shuffles=4,
                  weight0=1, weight1=1, name="CombLSTMNet", wavenet_blocks=1, wavenet_layers=2, comb_features=1024,
-                 embedding_net_type=NetType.STANDARD):
+                 embedding_net_type=NetType.STANDARD, dropout_rate_embedder=0.2, dropout_rate_fc=0.2):
 
         assert embedding_size > 0, "Number of channels for first layer has to be greater than 0!"
 
@@ -27,7 +27,11 @@ class CombLSTMNetwork:
         self.wavenet_blocks = wavenet_blocks
         self.wavenet_layers = wavenet_layers
         self.embedding_net_type = embedding_net_type
+        self.dropout_rate_embedder = dropout_rate_embedder
+        self.dropout_rate_fc = dropout_rate_fc
+
         self.labels = None
+        self.is_training = None
         self.weight = None
         self.loss = None
         self.loss_ones = None
@@ -48,6 +52,7 @@ class CombLSTMNetwork:
     def forward(self):
         with tf.variable_scope(self.name):
             self.labels = tf.placeholder(dtype="float32", shape=[self.batch_size], name="Labels")
+            self.is_training = tf.placeholder_with_default(True, shape=())
 
             self.embed_clauses()
             self.embed_neg_conjecture()
@@ -65,8 +70,10 @@ class CombLSTMNetwork:
                                                  times=self.num_train_clauses)
 
             layer1 = self.first_combination_layer(lstm_one_output, neg_conj_vector, reuse=True)
+            layer1_dropout = dropout(layer1, self.dropout_rate_fc, training=self.is_training)
 
-            lstm_two_output, temp_state = self.lstm_two(layer1, self.repeat_lstm_states(self.state_lstm_two))
+            lstm_two_output, temp_state = self.lstm_two(layer1_dropout, self.repeat_lstm_states(self.state_lstm_two))
+            lstm_two_output = dropout(lstm_two_output, self.dropout_rate_fc, training=self.is_training)
 
             self.weight = fully_connected(input_=lstm_two_output, outputs=1, activation_fn=tf.nn.sigmoid, reuse=False,
                                           name=FC_LAYER_2, use_batch_norm=False)
@@ -75,6 +82,32 @@ class CombLSTMNetwork:
                 self.weight = tf.reshape(tensor=self.weight, shape=[-1], name="ReshapeTo1D")
             self.loss, self.loss_ones, self.loss_zeros, self.all_losses = weighted_BCE_loss(self.weight, self.labels,
                                                                                             self.weight0, self.weight1)
+
+            self.add_feature_visualizations([(self.neg_conj_embedded[0, :], "FeatureNegConj")])
+            self.add_feature_visualizations([(self.train_clauses, "FeaturesClause"),
+                                             (lstm_one_output, "FeaturesClauseLSTM"),
+                                             (layer1, "FeaturesCombOne"),
+                                             (lstm_two_output, "FeaturesCombLSTM")],
+                                            indices=[(self.num_init_clauses, "Positive_"),
+                                                     (self.num_init_clauses+self.num_train_clauses/2, "Negative_")])
+
+    def add_feature_visualizations(self, feature_tensor_tuples, scale_size=32, indices=None):
+        if indices is None:
+            for feature_tensor, name in feature_tensor_tuples:
+                self.visualize_feature_tensor(feature_tensor, name, scale_size)
+        else:
+            for tensor_index, name_prefix in indices:
+                tensor_index = int(tensor_index)
+                with tf.name_scope(name_prefix):
+                    for feature_tensor, name in feature_tensor_tuples:
+                        self.visualize_feature_tensor(feature_tensor[tensor_index], name, scale_size)
+
+    def visualize_feature_tensor(self, feature_tensor, name, scale_size):
+        image = tf.reshape(feature_tensor, shape=[1, int(scale_size), int(2 * self.embedding_size / scale_size), 1])
+        image = tf.tile(image, multiples=[1, 1, 1, 3])
+        tf.summary.image(name=name,
+                         tensor=image,
+                         max_outputs=1)
 
     def repeat_lstm_states(self, state):
         rep_factor = int(self.num_train_clauses / self.num_shuffles)
@@ -92,7 +125,8 @@ class CombLSTMNetwork:
                                            batch_size=self.batch_size + self.num_init_clauses * self.num_proof,
                                            char_number=None, net_type=self.embedding_net_type, tensor_height=1,
                                            use_batch_norm=False, wavenet_blocks=self.wavenet_blocks,
-                                           wavenet_layers=self.wavenet_layers)
+                                           wavenet_layers=self.wavenet_layers, dropout_rate=self.dropout_rate_embedder,
+                                           is_training=self.is_training)
         # Squeeze so that LSTMs can run with fully connected layers
         all_clauses = tf.split(tf.squeeze(self.clause_embedder.embedded_vector), num_or_size_splits=2, axis=0)
         self.train_clauses = all_clauses[0]
@@ -223,7 +257,8 @@ class CombLSTMNetwork:
                                                    reuse_vocab=True, batch_size=self.num_proof, char_number=None,
                                                    net_type=self.embedding_net_type, tensor_height=1,
                                                    use_batch_norm=False, wavenet_blocks=self.wavenet_blocks,
-                                                   wavenet_layers=self.wavenet_layers)
+                                                   wavenet_layers=self.wavenet_layers, dropout_rate=self.dropout_rate_embedder,
+                                                   is_training=self.is_training)
         # Squeeze so that LSTMs can run with fully connected layers
         self.neg_conj_embedded = tf.squeeze(self.neg_conjecture_embedder.embedded_vector)
 

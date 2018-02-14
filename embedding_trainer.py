@@ -10,6 +10,8 @@ from TPTP_train_val_files import get_TPTP_test_files, get_TPTP_train_files, conv
     get_TPTP_test_small, get_TPTP_train_small, get_TPTP_clause_test_files
 from model_trainer import ModelTrainer
 from ops import *
+from glob import glob
+from tensorflow.python.client import timeline
 
 
 class EmbeddingTrainer:
@@ -71,14 +73,15 @@ class EmbeddingTrainer:
 
         with tf.Session() as sess:
             sess.run(initialize_tf_variables())
-            if self.loading_model and load_model(saver, sess, self.checkpoint_dir):
+            load_directory = sorted(glob(os.path.join(self.checkpoint_dir, "*")))[0]
+            if self.loading_model and load_model(saver, sess, load_directory):
                 print(" [*] Load model - SUCCESS")
             elif self.loading_model:
                 print(" [!] Load model - failed...")
             elif self.load_vocab:
                 vocab_saver = tf.train.Saver({"CombLSTMNet/Vocabulary/Vocabs": self.model.clause_embedder.vocab_table,
                                               "CombLSTMNet/Vocabulary/Arities": self.model.clause_embedder.arity_table})
-                if load_model(vocab_saver, sess, self.checkpoint_dir):
+                if load_model(vocab_saver, sess, load_directory):
                     print(" [*] Load vocabulary - SUCCESS")
                 else:
                     print(" [!] Load vocabulary - failed...")
@@ -92,6 +95,7 @@ class EmbeddingTrainer:
             train_writer = tf.summary.FileWriter(os.path.join(self.summary_dir, "train/" + timestamp), sess.graph)
             val_writer = tf.summary.FileWriter(os.path.join(self.summary_dir, "val/" + timestamp))
             self.test_folder = os.path.join(self.summary_dir, "test/" + timestamp + "/")
+            self.checkpoint_dir = os.path.join(self.checkpoint_dir, timestamp)
             if not os.path.exists(self.test_folder):
                 os.makedirs(self.test_folder)
 
@@ -110,12 +114,25 @@ class EmbeddingTrainer:
 
                 start_time = time.time()
                 batch = self.model_trainer.get_train_batch(self.batch_size)
+                if training_step % 2000 == 5:
+                    run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                    run_metadata = tf.RunMetadata()
+                else:
+                    run_options = None
+                    run_metadata = None
                 loss, loss_zeros, loss_ones, all_losses, sum_str, _ = \
                     self.model_trainer.run_model(sess, self.model, [self.model.loss, self.model.loss_zeros,
                                                                     self.model.loss_ones, self.model.all_losses,
-                                                                    summary, optimizer], batch)
+                                                                    summary, optimizer], batch, is_training=True,
+                                                 run_options=run_options, run_metadata=run_metadata)
+                if run_metadata is not None:
+                    # Create the Timeline object, and write it to a json file
+                    fetched_timeline = timeline.Timeline(run_metadata.step_stats)
+                    chrome_trace = fetched_timeline.generate_chrome_trace_format()
+                    with open('timeline_'+str(training_step).zfill(6)+'.json', 'w') as f:
+                        f.write(chrome_trace)
 
-                if training_step % 10 == 0:
+                if training_step % 50 == 0:
                     train_writer.add_summary(sum_str, training_step)
                 print(
                         "Iters: [%5d|%5d], time: %4.4f, clause size: %2d|%2d, loss: %.5f, loss ones:%.5f, loss zeros:%.5f" % (
@@ -129,7 +146,8 @@ class EmbeddingTrainer:
             batch = self.model_trainer.get_val_batch(self.batch_size)
             loss_all, loss_ones, loss_zeros = self.model_trainer.run_model(sess, self.model,
                                                                            [self.model.loss, self.model.loss_ones,
-                                                                            self.model.loss_zeros], batch)
+                                                                            self.model.loss_zeros], batch,
+                                                                           is_training=False)
             avg_loss += np.array([loss_all, loss_ones, loss_zeros])
         avg_loss = avg_loss / self.val_batch_number
         print("#" * 125)
@@ -151,7 +169,7 @@ class EmbeddingTrainer:
         for batch in all_batches:
             print("Test batch " + str(i))
             i += 1
-            weights = self.model_trainer.run_model(sess, self.model, [self.model.weight], batch)
+            weights = self.model_trainer.run_model(sess, self.model, [self.model.weight], batch, is_training=False)
             all_weights.append(weights[0])
         s = self.model_trainer.process_test_batches(all_weights)
         with open(os.path.join(self.test_folder, "test_file_" + str(training_step) + ".txt"), 'w') as f:
@@ -192,7 +210,7 @@ def start_training(args):
         max_clause_len=args.max_clause_len,
         max_neg_conj_len=args.max_neg_conj_len
     )
-    trainer = EmbeddingTrainer(model_trainer=modtr, checkpoint_dir="CNN_LSTM", model_name="CNN_LSTM",
+    trainer = EmbeddingTrainer(model_trainer=modtr, checkpoint_dir="CNN_Dense", model_name="CNN_Dense",
                                val_batch_number=20, batch_size=256, val_steps=args.val_steps,
                                save_steps=args.save_steps, lr=0.00001, load_vocab=args.load_vocab,
                                loading_model=args.load_model, test_steps=args.test_steps,

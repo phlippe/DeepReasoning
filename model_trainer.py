@@ -9,7 +9,7 @@ class ModelTrainer:
         pass
 
     @abstractmethod
-    def run_model(self, sess, model, fetches, batch):
+    def run_model(self, sess, model, fetches, batch, is_training=True, run_options=None, run_metadata=None):
         pass
 
     @abstractmethod
