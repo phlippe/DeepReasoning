@@ -352,13 +352,17 @@ def weighted_BCE_loss(predictions, labels, weight0=1, weight1=1):
 
 def log_loss_function(value):
     epsilon = tf.constant(math.e**(-5), dtype=tf.float32, name="epsilon")
-    return tf.log(tf.pow(value, 1.5) + epsilon)     # *(1-value)
+    return tf.log(tf.pow(value, 1.5) + epsilon)*focal_loss_modulation(value)
 
 
 def shortened_loss_function(value):
     # loss(0) = -1
     # loss(1) = 0
-    return tf.log(((1 + value * (math.e - 1)) / math.e))    # *(1-value)
+    return tf.log(((1 + value * (math.e - 1)) / math.e))*focal_loss_modulation(value)
+
+
+def focal_loss_modulation(value):
+    return tf.pow((1-value), 0.5)
 
 
 def concat(values, axis, name="Concat"):

@@ -108,10 +108,14 @@ class CombLSTMTrainer(ModelTrainer):
                 print(" [#] INFO: Adding extra index of "+all_files[i]+" to train loader ("+str(len(self.train_loader.proof_indices))+")")
             if all_proof_losses[i]/loss_mean <= 0.5:
                 self.train_loader.remove_proof_index(self.batch_proofs[i])
-                print(" [#] INFO: Removing a index of "+all_files[i]+" from train loader ("+str(len(self.train_loader.proof_indices))+")")
+                print(" [#] INFO: Removing an index of "+all_files[i]+" from train loader ("+str(len(self.train_loader.proof_indices))+")")
 
     def get_test_batches(self, batch_size):
         return [batch[:-1] for batch in self.test_batches]
 
     def process_test_batches(self, weights):
         return self.test_loader.print_out_results(self.test_batches, weights)
+
+    def set_max_len(self, clause_len, conj_len):
+        self.train_loader.set_max_len(clause_len, conj_len)
+        self.val_loader.set_max_len(clause_len, conj_len)

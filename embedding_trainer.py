@@ -12,6 +12,7 @@ from model_trainer import ModelTrainer
 from ops import *
 from glob import glob
 from tensorflow.python.client import timeline
+import math
 
 
 class EmbeddingTrainer:
@@ -71,7 +72,8 @@ class EmbeddingTrainer:
         optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(self.model.loss,
                                                                                  global_step=global_step)
 
-        with tf.Session() as sess:
+        session_config = tf.ConfigProto(allow_soft_placement=True)
+        with tf.Session(config=session_config) as sess:
             sess.run(initialize_tf_variables())
             load_directory = sorted(glob(os.path.join(self.checkpoint_dir, "*")))[0]
             if self.loading_model and load_model(saver, sess, load_directory):
@@ -125,6 +127,7 @@ class EmbeddingTrainer:
                                                                     self.model.loss_ones, self.model.all_losses,
                                                                     summary, optimizer], batch, is_training=True,
                                                  run_options=run_options, run_metadata=run_metadata)
+
                 if run_metadata is not None:
                     # Create the Timeline object, and write it to a json file
                     train_writer.add_run_metadata(run_metadata, "step_"+str(training_step), training_step)
@@ -140,6 +143,9 @@ class EmbeddingTrainer:
                     training_step, self.training_iter, time.time() - start_time, np.max(batch[1]), np.max(batch[3]),
                     loss, loss_ones, loss_zeros))
                 self.model_trainer.process_specific_loss_information(all_losses)
+
+                if math.isnan(loss):
+                    print("Loss is nan. Stopping training...")
 
     def run_validation(self, sess):
         avg_loss = np.zeros(shape=3, dtype=np.float32)

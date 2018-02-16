@@ -19,7 +19,7 @@ class CNNEmbedder:
     def __init__(self, embedding_size, layer_number=3, channel_size=-1, kernel_size=5, batch_size=1, input_channels=-1,
                  char_number=50, name="CNNEmbedder", reuse_vocab=False, tensor_height=1, net_type=NetType.STANDARD,
                  reuse_weights=False, use_batch_norm=False,  wavenet_blocks=1, wavenet_layers=2, dropout_rate=0.5,
-                 is_training=False, max_pool_prop=0.8):
+                 is_training=False, max_pool_prop=0.9):
 
         assert layer_number > 0, "Number of layers can not be negative nor 0"
         assert embedding_size > 0, "The embedding size can not be negative nor 0"
@@ -118,7 +118,7 @@ class CNNEmbedder:
                                                   kernel_size=3, training=self.is_training,
                                                   dropout_rate=self.dropout_rate)
 
-                # final 3x3 convolution without stride to support higher complexity for small clauses
+                # final 3x1 convolution without stride to support higher complexity for small clauses
                 final_layer = conv1d(input_=dense_layer, output_dim=2*self.embedding_size, kernel_size=3,
                                      name="FinalLocalConv", relu=False, use_batch_norm=self.use_batch_norm,
                                      reuse=self.reuse_weights)

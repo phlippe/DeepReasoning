@@ -70,9 +70,9 @@ class CombLSTMNetwork:
             layer_comb = self.first_combination_layer(self.train_clauses, neg_conj_vector, reuse=True)
             layer_comb_dropout = dropout(layer_comb, self.dropout_rate_fc, training=self.is_training)
 
-            tensor_with_state = tf.concat(values=[layer_comb_dropout,
-                                                  self.repeat_lstm_states(self.state_lstm_initial)[0]],
-                                          axis=1)
+            shaped_state = self.repeat_lstm_states(self.state_lstm_initial)[0]
+            shaped_state = tf.nn.tanh(shaped_state, name="StateActivationFct")
+            tensor_with_state = tf.concat(values=[layer_comb_dropout, shaped_state], axis=1)
             layer_initial = fully_connected(input_=tensor_with_state, outputs=self.comb_features,
                                             activation_fn=tf.nn.relu, reuse=False, name=FC_LAYER_2,
                                             use_batch_norm=False)
@@ -90,7 +90,8 @@ class CombLSTMNetwork:
                 self.add_feature_visualizations([(self.neg_conj_embedded[0, :], "FeatureNegConj")])
                 self.add_feature_visualizations([(self.train_clauses, "FeaturesClause"),
                                                  (layer_comb, "FeaturesCombClauseNegConj"),
-                                                 (layer_initial, "FeaturesCombInitialMemory")],
+                                                 (layer_initial, "FeaturesCombInitialMemory"),
+                                                 (shaped_state, "FeaturesState")],
                                                 indices=[(self.num_init_clauses, "Positive"),
                                                          (self.num_init_clauses+self.num_train_clauses/2, "Negative")])
 

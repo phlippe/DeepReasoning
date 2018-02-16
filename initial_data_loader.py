@@ -129,18 +129,20 @@ class InitialClauseLoader:
 
         batch_clause_length = get_clause_lengths(batch_clauses)
         batch_neg_conj_length = get_clause_lengths(batch_neg_conj)
-        clause_batch = np.zeros(shape=[batch_size, max(batch_clause_length)], dtype=np.int32) + self.empty_char
-        neg_conj_batch = np.zeros(shape=[num_proofs, max(batch_neg_conj_length)], dtype=np.int32) + self.empty_char
+        max_batch_clause_length = max(batch_clause_length)
+        max_batch_neg_conj_length = max(batch_neg_conj_length)
+        clause_batch = np.zeros(shape=[batch_size, max_batch_clause_length], dtype=np.int32) + self.empty_char
+        neg_conj_batch = np.zeros(shape=[num_proofs, max_batch_neg_conj_length], dtype=np.int32) + self.empty_char
         batch_clause_length = np.array(batch_clause_length)
         batch_neg_conj_length = np.array(batch_neg_conj_length)
         for b in range(batch_size):
             clause_batch[b, :batch_clause_length[b]] = np.array(batch_clauses[b])
         for b in range(num_proofs):
             neg_conj_batch[b, :batch_neg_conj_length[b]] = np.array(batch_neg_conj[b])
-        if max(batch_clause_length) > self.max_clause_len:
+        if max_batch_clause_length > self.max_clause_len:
             clause_batch = clause_batch[:, :self.max_clause_len]
             batch_clause_length = np.minimum(batch_clause_length, self.max_clause_len)
-        if max(batch_neg_conj_length) > self.max_neg_conj_len:
+        if max_batch_neg_conj_length > self.max_neg_conj_len:
             neg_conj_batch = neg_conj_batch[:, :self.max_neg_conj_len]
             batch_neg_conj_length = np.minimum(batch_neg_conj_length, self.max_neg_conj_len)
         self.global_batch = [clause_batch, batch_clause_length, neg_conj_batch, batch_neg_conj_length,
@@ -150,14 +152,19 @@ class InitialClauseLoader:
         ClauseLoader.print_loader_statistic(self.proof_loader)
 
     def add_proof_index(self, pindex):
-        insert_index = randint(self.proof_index + 64 if self.proof_index + 64 < len(self.proof_loader) else 0,
-                               min(self.proof_index+384, len(self.proof_loader)))
-        self.proof_indices.insert(insert_index, pindex)
+        if self.proof_indices.count(pindex) < 10:
+            insert_index = randint(self.proof_index + 64 if self.proof_index + 64 < len(self.proof_loader) else 0,
+                                   min(self.proof_index+384, len(self.proof_loader)))
+            self.proof_indices.insert(insert_index, pindex)
 
     def remove_proof_index(self, pindex):
         if self.proof_indices.count(pindex) > 1:
             last_occ = len(self.proof_indices) - 1 - self.proof_indices[::-1].index(pindex)
             del self.proof_indices[last_occ]
+
+    def set_max_len(self, clause_len, conj_len):
+        self.max_clause_len = clause_len
+        self.max_neg_conj_len = conj_len
 
 
 if __name__ == "__main__":
