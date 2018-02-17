@@ -10,7 +10,8 @@ FC_LAYER_3 = "Comb_final"
 class CombLSTMNetwork:
     def __init__(self, embedding_size=1024, num_init_clauses=32, num_proof=4, num_train_clauses=32, num_shuffles=4,
                  weight0=1, weight1=1, name="CombLSTMNet", wavenet_blocks=1, wavenet_layers=2, comb_features=1024,
-                 embedding_net_type=NetType.STANDARD, dropout_rate_embedder=0.2, dropout_rate_fc=0.1):
+                 embedding_net_type=NetType.STANDARD, dropout_rate_embedder=0.2, dropout_rate_fc=0.1,
+                 use_conversion=False):
 
         assert embedding_size > 0, "Number of channels for first layer has to be greater than 0!"
 
@@ -30,6 +31,7 @@ class CombLSTMNetwork:
         self.embedding_net_type = embedding_net_type
         self.dropout_rate_embedder = dropout_rate_embedder
         self.dropout_rate_fc = dropout_rate_fc
+        self.use_conversion = use_conversion
 
         self.labels = None
         self.is_training = None
@@ -37,6 +39,7 @@ class CombLSTMNetwork:
         self.loss = None
         self.loss_ones = None
         self.loss_zeros = None
+        self.loss_regularization = None
         self.all_losses = None
         self.init_clauses = None
         self.train_clauses = None
@@ -85,6 +88,8 @@ class CombLSTMNetwork:
                 self.weight = tf.reshape(tensor=self.weight, shape=[-1], name="ReshapeTo1D")
             self.loss, self.loss_ones, self.loss_zeros, self.all_losses = weighted_BCE_loss(self.weight, self.labels,
                                                                                             self.weight0, self.weight1)
+            self.loss_regularization = weight_decay_loss()
+            self.loss += self.loss_regularization
 
             with tf.name_scope("SummaryVisu"):
                 self.add_feature_visualizations([(self.neg_conj_embedded[0, :], "FeatureNegConj")])
@@ -130,7 +135,7 @@ class CombLSTMNetwork:
                                            char_number=None, net_type=self.embedding_net_type, tensor_height=1,
                                            use_batch_norm=False, wavenet_blocks=self.wavenet_blocks,
                                            wavenet_layers=self.wavenet_layers, dropout_rate=self.dropout_rate_embedder,
-                                           is_training=self.is_training)
+                                           is_training=self.is_training, use_conversion=self.use_conversion)
         # Squeeze so that LSTMs can run with fully connected layers
         all_clauses = tf.split(tf.squeeze(self.clause_embedder.embedded_vector), num_or_size_splits=2, axis=0)
         self.train_clauses = all_clauses[0]
@@ -265,7 +270,7 @@ class CombLSTMNetwork:
                                                    net_type=self.embedding_net_type, tensor_height=1,
                                                    use_batch_norm=False, wavenet_blocks=self.wavenet_blocks,
                                                    wavenet_layers=self.wavenet_layers, dropout_rate=self.dropout_rate_embedder,
-                                                   is_training=self.is_training)
+                                                   is_training=self.is_training, use_conversion=self.use_conversion)
         # Squeeze so that LSTMs can run with fully connected layers
         self.neg_conj_embedded = tf.squeeze(self.neg_conjecture_embedder.embedded_vector)
 

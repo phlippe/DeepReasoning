@@ -10,7 +10,7 @@ from CNN_embedder_network import CNNEmbedder
 ALL_FILES = sorted(glob("/home/phillip/datasets/Cluster/Job25658_output/*/E-Prover_TF_*___E---2.0_G----_0003_C18_F1_SE_CS_SP_S0Y/REL015-1*/*.txt"))
 OUTPUT_DIR = "/home/phillip/datasets/Cluster/InitClauses/"
 PREFIX = "ClauseWeight_"
-VOCAB_CODES = CNNEmbedder.get_vocabulary().values()
+VOCAB_CODES = CNNEmbedder.get_vocabulary(use_conversion=False).values()
 if not os.path.exists(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR)
 

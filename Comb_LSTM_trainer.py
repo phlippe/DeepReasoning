@@ -10,7 +10,7 @@ import numpy as np
 class CombLSTMTrainer(ModelTrainer):
     def __init__(self, train_files, val_files, test_files, num_proofs, num_initial_clauses, num_training_clauses,
                  num_shuffles, val_batch_number, prob_pos=0.25, loss_filter_size=64, embedding_net_type=NetType.STANDARD,
-                 wavenet_blocks=1, wavenet_layers=2, max_clause_len=150, max_neg_conj_len=150):
+                 wavenet_blocks=1, wavenet_layers=2, max_clause_len=150, max_neg_conj_len=150, use_conversion=False):
         self.val_batch_number = val_batch_number
         self.val_batches = []
         self.val_index = 0
@@ -27,10 +27,11 @@ class CombLSTMTrainer(ModelTrainer):
 
         self.prob_pos = prob_pos
         self.train_loader = InitialClauseLoader(file_list=train_files, prob_pos=self.prob_pos,
-                                                max_clause_len=max_clause_len, max_neg_conj_len=max_neg_conj_len)
+                                                max_clause_len=max_clause_len, max_neg_conj_len=max_neg_conj_len,
+                                                use_conversion=use_conversion)
         self.val_loader = InitialClauseLoader(file_list=val_files, prob_pos=0.5, max_clause_len=max_clause_len,
-                                              max_neg_conj_len=max_neg_conj_len)
-        self.test_loader = TestClauseLoader(file_list=test_files)
+                                              max_neg_conj_len=max_neg_conj_len, use_conversion=use_conversion)
+        self.test_loader = TestClauseLoader(file_list=test_files, use_conversion=use_conversion)
         self.train_loader.print_statistic()
         self.val_loader.print_statistic()
         for i in range(self.val_batch_number):

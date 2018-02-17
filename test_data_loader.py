@@ -11,7 +11,7 @@ LABEL_NEGATIVE = 1
 
 class TestClauseLoader:
 
-    def __init__(self, file_list, empty_char=5, max_clause_len=150, max_neg_conj_len=-1):
+    def __init__(self, file_list, empty_char=5, max_clause_len=150, max_neg_conj_len=-1, use_conversion=False):
             self.empty_char = int(empty_char)
             self.proof_loader = []
             self.max_clause_len = max_clause_len
@@ -21,7 +21,7 @@ class TestClauseLoader:
                 self.max_neg_conj_len = max_neg_conj_len
 
             self.proof_loader = ClauseLoader.initialize_proof_loader(
-                [f for f in file_list if 'ClauseWeight_LCL' not in f])
+                [f for f in file_list if 'ClauseWeight_LCL' not in f], use_conversion=use_conversion)
 
     def get_all_batches(self, num_proofs, num_training_clauses, num_init_clauses):
         global LABEL_NEGATIVE, LABEL_POSITIVE

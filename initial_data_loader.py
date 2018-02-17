@@ -21,9 +21,9 @@ LABEL_NEGATIVE = 1
 
 class InitialClauseLoader:
     def __init__(self, file_list, empty_char=5, augment=True, prob_pos=0.3, index_divider=32, max_clause_len=150,
-                 max_neg_conj_len=-1):
+                 max_neg_conj_len=-1, use_conversion=False):
         if augment:
-            self.augmenter = DataAugmenter()
+            self.augmenter = DataAugmenter(use_conversion=use_conversion)
         else:
             self.augmenter = DefaultAugmenter()
         self.empty_char = int(empty_char)
@@ -39,7 +39,8 @@ class InitialClauseLoader:
         else:
             self.max_neg_conj_len = max_neg_conj_len
 
-        self.proof_loader = ClauseLoader.initialize_proof_loader([f for f in file_list if 'ClauseWeight_LCL' not in f])
+        self.proof_loader = ClauseLoader.initialize_proof_loader([f for f in file_list if 'ClauseWeight_LCL' not in f],
+                                                                 use_conversion=use_conversion)
 
         for index in range(len(self.proof_loader)):
             new_indices = [index for _ in range(int(math.ceil(
@@ -152,7 +153,7 @@ class InitialClauseLoader:
         ClauseLoader.print_loader_statistic(self.proof_loader)
 
     def add_proof_index(self, pindex):
-        if self.proof_indices.count(pindex) < 10:
+        if self.proof_indices.count(pindex) < 20:
             insert_index = randint(self.proof_index + 64 if self.proof_index + 64 < len(self.proof_loader) else 0,
                                    min(self.proof_index+384, len(self.proof_loader)))
             self.proof_indices.insert(insert_index, pindex)

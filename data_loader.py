@@ -22,7 +22,7 @@ LABEL_NEGATIVE = 1
 
 
 class ProofExampleLoader:
-    def __init__(self, file_prefix=None, use_conversion=True):
+    def __init__(self, file_prefix=None, use_conversion=False):
         self.pos_examples = []
         self.neg_examples = []
         self.init_clauses = []
@@ -259,14 +259,14 @@ class ClauseLoader:
         self.permute_negatives()
 
     @staticmethod
-    def initialize_proof_loader(file_list):
+    def initialize_proof_loader(file_list, use_conversion=False):
         problems = [0, 0, 0]
         large_inits = 0
         easy_problems = 0
         proof_loader = []
         for proof_file in file_list:
             print(proof_file)
-            new_proof_loader = ProofExampleLoader(proof_file, use_conversion=False)
+            new_proof_loader = ProofExampleLoader(proof_file, use_conversion=use_conversion)
             if len(new_proof_loader.get_negated_conjecture()) == 0 or new_proof_loader.get_number_of_negatives() == 0 or new_proof_loader.get_number_of_positives() == 0:
                 print("Could not use this proof loader, no negatives and positives or no conjecture...")
                 problems[0] = problems[0] + 1

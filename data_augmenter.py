@@ -14,8 +14,9 @@ class DefaultAugmenter:
 
 
 class DataAugmenter:
-    def __init__(self):
-        self.vocab = DataAugmenter.load_vocab()
+    def __init__(self, use_conversion=False):
+        self.use_conversion = use_conversion
+        self.vocab = self.load_vocab()
         self.variables = DataAugmenter.get_variables(self.vocab)
 
     def augment_clause(self, clause):
@@ -76,9 +77,8 @@ class DataAugmenter:
     def split_list(iterable, splitters):
         return [list(g) for k, g in itertools.groupby(iterable, lambda x: x in splitters) if not k]
 
-    @staticmethod
-    def load_vocab():
-        return CNNEmbedder.get_vocabulary()
+    def load_vocab(self):
+        return CNNEmbedder.get_vocabulary(use_conversion=self.use_conversion)
 
     @staticmethod
     def get_variables(vocab):
@@ -90,7 +90,7 @@ class DataAugmenter:
 
 
 def test_augmentation():
-    vocab = CNNEmbedder.get_vocabulary()
+    vocab = CNNEmbedder.get_vocabulary(use_conversion=False)
     clause = ["left_inverse#1", "(", "X1", "X2", ")", ",", "left_zero#2", "(", "X2", "X3", ")", "=", "living#2", "(", "X4", "X1", ")",",","lonely#1","(","X4",")"]
     clause = [vocab[x] for x in clause]
     print(clause)

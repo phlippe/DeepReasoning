@@ -3,8 +3,11 @@ import math
 
 import tensorflow as tf
 from tensorflow.python.framework import graph_util
+from tensorflow.python.tools import inspect_checkpoint as chkp
+
 
 IS_OLD_TENSORFLOW = (tf.__version__[0] == '0')
+WEIGHT_DECAY_FACTOR = tf.constant(2e-6, name="WeightDecayFactor")
 
 
 def conv2d(input_, output_dim,
@@ -23,11 +26,14 @@ def conv2d(input_, output_dim,
     :param padding: Padding of convolution layer
     :return: Output of convolution with shape NHWC (channel size = output_dim)
     """
+    global WEIGHT_DECAY_FACTOR
     with tf.variable_scope(name, reuse=reuse):
         w = tf.get_variable('w', [k_h, k_w, input_.get_shape()[-1], output_dim],
-                            initializer=tf.contrib.layers.xavier_initializer())
+                            initializer=tf.contrib.layers.xavier_initializer(),
+                            regularizer=tf.contrib.layers.l2_regularizer(WEIGHT_DECAY_FACTOR))
         biases = tf.get_variable('biases', [output_dim],
-                                 initializer=tf.constant_initializer(0.0))
+                                 initializer=tf.constant_initializer(0.0),
+                                 regularizer=tf.contrib.layers.l2_regularizer(WEIGHT_DECAY_FACTOR))
         conv = tf.nn.conv2d(input_, w, strides=[1, d_h, d_w, 1], padding=padding)
 
         # conv = tf.reshape(tf.nn.bias_add(conv, biases), conv.get_shape())
@@ -57,15 +63,18 @@ def dilated_conv2d(input_, output_dim,
       reuse - If variables should be reused
       padding - Padding of convolution layer
     """
+    global WEIGHT_DECAY_FACTOR
     with tf.variable_scope(name, reuse=reuse):
         input_shape = input_.get_shape().as_list()
         w = tf.get_variable('w', [k_h, k_w, input_shape[-1], output_dim],
-                            initializer=tf.contrib.layers.xavier_initializer())
+                            initializer=tf.contrib.layers.xavier_initializer(),
+                            regularizer=tf.contrib.layers.l2_regularizer(WEIGHT_DECAY_FACTOR))
         conv = tf.nn.atrous_conv2d(
             input_, w, rate=dilation_rate, padding=padding)
 
         biases = tf.get_variable('biases', [output_dim],
-                                 initializer=tf.constant_initializer(0.0))
+                                 initializer=tf.constant_initializer(0.0),
+                                 regularizer=tf.contrib.layers.l2_regularizer(WEIGHT_DECAY_FACTOR))
         conv = tf.reshape(tf.nn.bias_add(conv, biases), shape=[input_shape[0], input_shape[1], -1, input_shape[3]])
         return conv
 
@@ -254,7 +263,8 @@ def fully_connected(input_, outputs, activation_fn=tf.nn.relu, reuse=False, name
     with tf.variable_scope(name):
         # Earlier: fc = tf.contrib.layers.fully_connected(input_, outputs, activation_fn, reuse=reuse)
         # Now using 1x1 convolution for possible height dimension
-        fc = activation_fn(conv1d(input_=input_, output_dim=outputs, kernel_size=1, relu=False, reuse=reuse, name=name, use_batch_norm=False))
+        fc = activation_fn(conv1d(input_=input_, output_dim=outputs, kernel_size=1, relu=False, reuse=reuse, name=name,
+                                  use_batch_norm=False))
         if use_batch_norm:
             fc = tf.layers.batch_normalization(fc)
         return fc
@@ -263,7 +273,6 @@ def fully_connected(input_, outputs, activation_fn=tf.nn.relu, reuse=False, name
 def save_model(saver, sess, checkpoint_dir, step, model_name):
     if not os.path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir)
-
     saver.save(sess, os.path.join(checkpoint_dir, model_name), global_step=step)
 
 
@@ -343,16 +352,17 @@ def weighted_BCE_loss(predictions, labels, weight0=1, weight1=1):
         cross_entropy_mean = tf.reduce_mean(
             cross_entropy, name="cross_entropy")
         ones_mean = tf.reduce_mean(cross_entropy * labels, name="ones_mean") * label_shape[
-            0] / tf.reduce_sum(labels)
+            0] / (tf.reduce_sum(labels) + 1e-10)
         zeros_mean = tf.reduce_mean(cross_entropy * inv_labels, name="zeros_mean") * label_shape[
-            0] / tf.reduce_sum(inv_labels)
+            0] / (tf.reduce_sum(inv_labels) + 1e-10)
 
         return cross_entropy_mean, ones_mean, zeros_mean, cross_entropy
 
 
 def log_loss_function(value):
     epsilon = tf.constant(math.e**(-5), dtype=tf.float32, name="epsilon")
-    return tf.log(tf.pow(value, 1.5) + epsilon)*focal_loss_modulation(value)
+    inner_log = tf.minimum(tf.pow(value, 1.5) + epsilon, (value + 1.0) / 2.0)
+    return tf.log(inner_log)*focal_loss_modulation(value)
 
 
 def shortened_loss_function(value):
@@ -362,7 +372,11 @@ def shortened_loss_function(value):
 
 
 def focal_loss_modulation(value):
-    return tf.pow((1-value), 0.5)
+    return tf.pow(tf.clip_by_value(1-value, 0.0, 1.0), 0.5)
+
+
+def weight_decay_loss():
+    return tf.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES), name="RegularizationLossSum")
 
 
 def concat(values, axis, name="Concat"):

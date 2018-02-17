@@ -13,6 +13,7 @@ from ops import *
 from glob import glob
 from tensorflow.python.client import timeline
 import math
+import sys
 
 
 class EmbeddingTrainer:
@@ -62,8 +63,10 @@ class EmbeddingTrainer:
         print("Start training with batch size " + str(self.batch_size) + " for " + str(
             self.training_iter) + " iterations (validation every " + str(self.val_steps) + " steps)")
 
-        saver = tf.train.Saver(max_to_keep=4)
-        global_step = tf.Variable(0, trainable=False)
+        start_iter = 1
+
+        saver = tf.train.Saver(max_to_keep=None)
+        global_step = tf.Variable(start_iter-1, trainable=False)
         learning_rate = tf.train.exponential_decay(learning_rate=self.lr,
                                                    global_step=global_step,
                                                    decay_steps=self.lr_decay_steps,
@@ -75,9 +78,12 @@ class EmbeddingTrainer:
         session_config = tf.ConfigProto(allow_soft_placement=True)
         with tf.Session(config=session_config) as sess:
             sess.run(initialize_tf_variables())
-            load_directory = sorted(glob(os.path.join(self.checkpoint_dir, "*")))[0]
+            load_directory = sorted(glob(os.path.join(self.checkpoint_dir, "*")))
+            print("All load directories: "+str(load_directory))
+            load_directory = load_directory[-1]
             if self.loading_model and load_model(saver, sess, load_directory):
                 print(" [*] Load model - SUCCESS")
+                start_iter = sess.run(global_step.read_value())
             elif self.loading_model:
                 print(" [!] Load model - failed...")
             elif self.load_vocab:
@@ -93,7 +99,12 @@ class EmbeddingTrainer:
             self.create_summary()
             summary = tf.summary.merge_all()
 
-            timestamp = str(datetime.datetime.now()).replace("-", "_").replace(" ", "_").split('.')[0]
+            if self.loading_model:
+                timestamp = load_directory.split("/")[-1]
+            else:
+                timestamp = str(datetime.datetime.now()).replace("-", "_").replace(" ", "_").split('.')[0]
+                timestamp = timestamp.replace(":", "-")
+
             train_writer = tf.summary.FileWriter(os.path.join(self.summary_dir, "train/" + timestamp), sess.graph)
             val_writer = tf.summary.FileWriter(os.path.join(self.summary_dir, "val/" + timestamp))
             self.test_folder = os.path.join(self.summary_dir, "test/" + timestamp + "/")
@@ -102,11 +113,11 @@ class EmbeddingTrainer:
                 os.makedirs(self.test_folder)
 
             # TRAINING LOOP
-            for training_step in range(1, self.training_iter):
+            for training_step in range(start_iter, self.training_iter):
 
                 if training_step % self.save_steps == 0:
                     print("Save model...")
-                    save_model(saver, sess, self.checkpoint_dir, training_step, self.model_name)
+                    save_model(saver, sess, self.checkpoint_dir, global_step, self.model_name)
                 if training_step % self.val_steps == 0:
                     print("Validate model...")
                     val_summary_str = self.run_validation(sess)
@@ -122,9 +133,10 @@ class EmbeddingTrainer:
                 else:
                     run_options = None
                     run_metadata = None
-                loss, loss_zeros, loss_ones, all_losses, sum_str, _ = \
+                loss, loss_zeros, loss_ones, all_losses, loss_regularization, sum_str, _ = \
                     self.model_trainer.run_model(sess, self.model, [self.model.loss, self.model.loss_zeros,
                                                                     self.model.loss_ones, self.model.all_losses,
+                                                                    self.model.loss_regularization,
                                                                     summary, optimizer], batch, is_training=True,
                                                  run_options=run_options, run_metadata=run_metadata)
 
@@ -136,16 +148,20 @@ class EmbeddingTrainer:
                     with open('timeline_'+str(training_step).zfill(6)+'.json', 'w') as f:
                         f.write(chrome_trace)
 
-                if training_step % 50 == 0:
+                if training_step % 20 == 0:
                     train_writer.add_summary(sum_str, training_step)
                 print(
-                        "Iters: [%5d|%5d], time: %4.4f, clause size: %2d|%2d, loss: %.5f, loss ones:%.5f, loss zeros:%.5f" % (
-                    training_step, self.training_iter, time.time() - start_time, np.max(batch[1]), np.max(batch[3]),
-                    loss, loss_ones, loss_zeros))
+                        "Iters: [%5d|%5d], time: %4.4f, clause size: %2d|%2d, loss: %.5f, loss ones:%.5f, "
+                        "loss zeros:%.5f, loss regularization:%.5f" % (
+                            training_step, self.training_iter, time.time() - start_time, np.max(batch[1]),
+                            np.max(batch[3]), loss, loss_ones, loss_zeros, loss_regularization
+                        )
+                )
                 self.model_trainer.process_specific_loss_information(all_losses)
 
                 if math.isnan(loss):
                     print("Loss is nan. Stopping training...")
+                    sys.exit(1)
 
     def run_validation(self, sess):
         avg_loss = np.zeros(shape=3, dtype=np.float32)
@@ -188,6 +204,7 @@ class EmbeddingTrainer:
         tf.summary.scalar('Loss', self.model.loss)
         tf.summary.scalar('Loss ones', self.model.loss_ones)
         tf.summary.scalar('Loss zeros', self.model.loss_zeros)
+        tf.summary.scalar('Loss regularization', self.model.loss_regularization)
         tf.summary.scalar('Highest prediction', tf.reduce_max(self.model.weight))
         tf.summary.scalar('Lowest prediction', tf.reduce_min(self.model.weight))
 
@@ -215,7 +232,8 @@ def start_training(args):
         wavenet_blocks=args.wv_blocks,
         wavenet_layers=args.wv_layers,
         max_clause_len=args.max_clause_len,
-        max_neg_conj_len=args.max_neg_conj_len
+        max_neg_conj_len=args.max_neg_conj_len,
+        use_conversion=args.conversion
     )
     batch_size = int(args.num_proofs * (args.num_training + args.num_init))
     trainer = EmbeddingTrainer(model_trainer=modtr, checkpoint_dir="CNN_Dense", model_name="CNN_Dense",
@@ -247,13 +265,13 @@ if __name__ == '__main__':
     parser.add_argument('-ss', '--save_steps', default=600, type=int,
                         help='After how many steps the network should be saved')
     parser.add_argument('-lv', '--load_vocab', action="store_true",
-                        help='If previous vocabulary should be loaded or not')
-    parser.add_argument('-lm', '--load_model', action="store_true", help='If previous model should be loaded or not')
+                        help='Whether previous vocabulary should be loaded or not')
+    parser.add_argument('-lm', '--load_model', action="store_true", help='Whether previous model should be loaded or not')
     parser.add_argument('-sf', '--small_files', action="store_true",
-                        help='If only a small amount of files should be used for training and testing')
-    parser.add_argument('-w', '--wavenet', action="store_true", help='If embedding model should use wavenet layers')
+                        help='Whether only a small amount of files should be used for training and testing')
+    parser.add_argument('-w', '--wavenet', action="store_true", help='Whether embedding model should use wavenet layers')
     parser.add_argument('-db', '--dense', action="store_true",
-                        help='If embedding model should use a dilated dense block')
+                        help='Whether embedding model should use a dilated dense block or not')
     parser.add_argument('-wl', '--wv_layers', default=2, type=int,
                         help='If wavenet is chosen, the number of layers per block used')
     parser.add_argument('-wb', '--wv_blocks', default=1, type=int,
@@ -266,6 +284,8 @@ if __name__ == '__main__':
                         help='Number of steps after which the learning rate should be decayed by the decay rate (see --lr_decay_rate)')
     parser.add_argument('-lrdr', '--lr_decay_rate', default=0.1, type=float,
                         help='Decay rate by which the learning rate is reduced per decay steps (see --lr_decay_steps)')
+    parser.add_argument('-conv', '--conversion', action="store_true",
+                        help='Whether vocabulary should be converted to a standard small one or not')
 
     args = parser.parse_args()
 

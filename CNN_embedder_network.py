@@ -19,7 +19,7 @@ class CNNEmbedder:
     def __init__(self, embedding_size, layer_number=3, channel_size=-1, kernel_size=5, batch_size=1, input_channels=-1,
                  char_number=50, name="CNNEmbedder", reuse_vocab=False, tensor_height=1, net_type=NetType.STANDARD,
                  reuse_weights=False, use_batch_norm=False,  wavenet_blocks=1, wavenet_layers=2, dropout_rate=0.5,
-                 is_training=False, max_pool_prop=0.9):
+                 is_training=False, max_pool_prop=0.9, use_conversion=False):
 
         assert layer_number > 0, "Number of layers can not be negative nor 0"
         assert embedding_size > 0, "The embedding size can not be negative nor 0"
@@ -51,6 +51,7 @@ class CNNEmbedder:
         self.dropout_rate = dropout_rate
         self.is_training = is_training
         self.max_pool_prop = max_pool_prop
+        self.use_conversion = use_conversion
 
         self.vocab_table = None
         self.arity_table = None
@@ -170,9 +171,9 @@ class CNNEmbedder:
         return tf.concat([embedded_vocabs, embedded_arities], axis=1)
 
     def get_random_clause(self):
-        random_clause = np.random.randint(0, len(list(self.get_vocabulary().values())),
+        random_clause = np.random.randint(0, len(list(self.get_vocabulary(use_conversion=self.use_conversion).values())),
                                           [self.batch_size * self.tensor_height, self.char_number], dtype=np.int32)
-        random_clause = np.take(a=list(self.get_vocabulary().values()), indices=random_clause)
+        random_clause = np.take(a=list(self.get_vocabulary(use_conversion=self.use_conversion).values()), indices=random_clause)
         return random_clause
 
     def get_zero_clause(self):
@@ -252,7 +253,7 @@ class CNNEmbedder:
         return tf.constant(vector, dtype=tf.int32, name="Arity_Index_Vector"), max(arities)
 
     def get_vocab_values_keys(self):
-        vocabulary = CNNEmbedder.get_vocabulary()
+        vocabulary = CNNEmbedder.get_vocabulary(use_conversion=self.use_conversion)
         values = vocabulary.values()
         keys = vocabulary.keys()
         if sys.version_info >= (3, 0):
@@ -277,8 +278,11 @@ class CNNEmbedder:
                     return -2
 
     @staticmethod
-    def get_vocabulary():
-        VOCAB_FILE_NAME = "Vocabs.txt"  #"Conversion_vocab.txt"
+    def get_vocabulary(use_conversion):
+        if use_conversion:
+            VOCAB_FILE_NAME = "Conversion_vocab.txt"
+        else:
+            VOCAB_FILE_NAME = "Vocabs.txt"
         with open(VOCAB_FILE_NAME, 'r') as inf:
             dict_from_file = eval(inf.read())
         return dict_from_file
