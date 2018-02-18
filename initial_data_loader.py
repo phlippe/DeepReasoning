@@ -39,7 +39,7 @@ class InitialClauseLoader:
         else:
             self.max_neg_conj_len = max_neg_conj_len
 
-        self.proof_loader = ClauseLoader.initialize_proof_loader([f for f in file_list if 'ClauseWeight_LCL' not in f],
+        self.proof_loader = ClauseLoader.initialize_proof_loader(file_list, # [f for f in file_list if 'ClauseWeight_LCL' not in f],
                                                                  use_conversion=use_conversion)
 
         for index in range(len(self.proof_loader)):
@@ -153,7 +153,7 @@ class InitialClauseLoader:
         ClauseLoader.print_loader_statistic(self.proof_loader)
 
     def add_proof_index(self, pindex):
-        if self.proof_indices.count(pindex) < 20:
+        if self.proof_indices.count(pindex) < 30:
             insert_index = randint(self.proof_index + 64 if self.proof_index + 64 < len(self.proof_loader) else 0,
                                    min(self.proof_index+384, len(self.proof_loader)))
             self.proof_indices.insert(insert_index, pindex)

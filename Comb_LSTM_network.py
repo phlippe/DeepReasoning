@@ -67,6 +67,7 @@ class CombLSTMNetwork:
     def run_comb_layers(self):
         global FC_LAYER_2, FC_LAYER_3
         with tf.name_scope("CombNetwork"):
+            # TODO: Test network without negated conjecture. Could maybe help for generalization because it is also a initial clause => already analyzed
             neg_conj_vector = self.repeat_tensor(tensor_to_repeat=self.neg_conj_embedded, axis=0,
                                                  times=self.num_train_clauses)
 

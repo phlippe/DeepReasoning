@@ -65,7 +65,6 @@ class EmbeddingTrainer:
 
         start_iter = 1
 
-        saver = tf.train.Saver(max_to_keep=None)
         global_step = tf.Variable(start_iter-1, trainable=False)
         learning_rate = tf.train.exponential_decay(learning_rate=self.lr,
                                                    global_step=global_step,
@@ -76,8 +75,10 @@ class EmbeddingTrainer:
                                                                                  global_step=global_step)
 
         session_config = tf.ConfigProto(allow_soft_placement=True)
+        init_op = initialize_tf_variables()
+        saver = tf.train.Saver(max_to_keep=None)
         with tf.Session(config=session_config) as sess:
-            sess.run(initialize_tf_variables())
+            sess.run(init_op)
             load_directory = sorted(glob(os.path.join(self.checkpoint_dir, "*")))
             print("All load directories: "+str(load_directory))
             load_directory = load_directory[-1]
@@ -148,7 +149,7 @@ class EmbeddingTrainer:
                     with open('timeline_'+str(training_step).zfill(6)+'.json', 'w') as f:
                         f.write(chrome_trace)
 
-                if training_step % 20 == 0:
+                if training_step % 50 == 0:
                     train_writer.add_summary(sum_str, training_step)
                 print(
                         "Iters: [%5d|%5d], time: %4.4f, clause size: %2d|%2d, loss: %.5f, loss ones:%.5f, "

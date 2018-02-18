@@ -10,6 +10,23 @@ IS_OLD_TENSORFLOW = (tf.__version__[0] == '0')
 WEIGHT_DECAY_FACTOR = tf.constant(2e-6, name="WeightDecayFactor")
 
 
+def get_vocab_variable(name, shape, scale_factor=1e-3):
+    def vocab_regularization(weights):
+        with tf.name_scope("Regularization"):
+            return scale_factor*tf.reduce_mean(tf.pow(weights, 2) / 2.0)
+    vocab = tf.get_variable(name,
+                            initializer=tf.random_uniform(shape=shape,
+                                                          minval=-1.0,
+                                                          maxval=1.0,
+                                                          dtype=tf.float32),
+                            regularizer=vocab_regularization,
+                            dtype=tf.float32)
+    tf.summary.scalar(name="Voc_"+name+"_Max", tensor=tf.reduce_max(input_tensor=vocab))
+    tf.summary.scalar(name="Voc_"+name+"_Min", tensor=tf.reduce_min(input_tensor=vocab))
+    tf.summary.scalar(name="Voc_"+name+"_Var", tensor=tf.reduce_mean(input_tensor=(tf.pow(vocab, 2) / 2.0)))
+    return vocab
+
+
 def conv2d(input_, output_dim,
            k_h=3, k_w=3, d_h=1, d_w=1,
            name="conv2d", reuse=False, padding='SAME', relu=False, use_batch_norm=False):
@@ -124,7 +141,7 @@ def dilated_conv1d(input_, output_dim, k_w=3, dilation_rate=1,
 
 
 def fast_dilated_conv1d(input_, output_dim, k_w=3, dilation_rate=1, name="fast_dilconv1d", reuse=False):
-    with tf.variable_scope(name):
+    with tf.name_scope(name):
         if dilation_rate != 1:
             input_shape = input_.get_shape().as_list()
             if len(input_shape) == 3:
@@ -341,6 +358,9 @@ def freeze_graph(model_folder, output_node_names, file_name="frozen_model.pb"):
 
 def weighted_BCE_loss(predictions, labels, weight0=1, weight1=1):
     with tf.variable_scope("WCE_Loss"):
+        predictions = tf.clip_by_value(t=predictions, clip_value_min=0, clip_value_max=1)
+        labels = tf.clip_by_value(t=labels, clip_value_min=0, clip_value_max=1)
+
         inv_labels = 1 - labels
         coef0 = inv_labels * weight0
         coef1 = labels * weight1

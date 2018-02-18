@@ -205,25 +205,28 @@ class CNNEmbedder:
             else:
                 vocab_shape = [max(vocab_values) + vocab_offset, int(self.channel_size / 2)]
 
-                self.vocab_table = tf.Variable(initial_value=tf.random_uniform(shape=vocab_shape,
-                                                                               minval=-1.0,
-                                                                               maxval=1.0,
-                                                                               dtype=tf.float32),
-                                               trainable=True,
-                                               name="Vocabs",
-                                               expected_shape=vocab_shape,
-                                               dtype=tf.float32)
+                # self.vocab_table = tf.Variable(initial_value=tf.random_uniform(shape=vocab_shape,
+                #                                                                minval=-1.0,
+                #                                                                maxval=1.0,
+                #                                                                dtype=tf.float32),
+                #                                trainable=True,
+                #                                name="Vocabs",
+                #                                expected_shape=vocab_shape,
+                #                                dtype=tf.float32)
+                self.vocab_table = get_vocab_variable(name="Vocabs", shape=vocab_shape)
 
                 arity_shape = [max_arity, int(self.channel_size / 2)]
                 # print(arity_shape)
-                self.arity_table = tf.Variable(initial_value=tf.random_uniform(shape=arity_shape,
-                                                                               minval=-1.0,
-                                                                               maxval=1.0,
-                                                                               dtype=tf.float32),
-                                               trainable=True,
-                                               name="Arities",
-                                               expected_shape=arity_shape,
-                                               dtype=tf.float32)
+                # self.arity_table = tf.Variable(initial_value=tf.random_uniform(shape=arity_shape,
+                #                                                                minval=-1.0,
+                #                                                                maxval=1.0,
+                #                                                                dtype=tf.float32),
+                #                                trainable=True,
+                #                                name="Arities",
+                #                                expected_shape=arity_shape,
+                #                                dtype=tf.float32)
+                self.arity_table = get_vocab_variable(name="Arities", shape=arity_shape)
+
                 GLOBAL_VOCAB = self.vocab_table
                 GLOBAL_ARITIES = self.arity_table
 
