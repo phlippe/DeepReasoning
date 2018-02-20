@@ -20,6 +20,7 @@ def get_vocab_variable(name, shape, scale_factor=1e-3):
                                                           maxval=1.0,
                                                           dtype=tf.float32),
                             regularizer=vocab_regularization,
+                            trainable=True,
                             dtype=tf.float32)
     tf.summary.scalar(name="Voc_"+name+"_Max", tensor=tf.reduce_max(input_tensor=vocab))
     tf.summary.scalar(name="Voc_"+name+"_Min", tensor=tf.reduce_min(input_tensor=vocab))
@@ -392,10 +393,12 @@ def shortened_loss_function(value):
 
 
 def focal_loss_modulation(value):
-    return tf.pow(tf.clip_by_value(1-value, 0.0, 1.0), 0.5)
+    return tf.pow(tf.clip_by_value(1-value, 0.05, 0.95), 0.5)
 
 
 def weight_decay_loss():
+    print(tf.GraphKeys.GLOBAL_VARIABLES)
+    print(tf.GraphKeys.TRAINABLE_VARIABLES)
     return tf.add_n(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES), name="RegularizationLossSum")
 
 

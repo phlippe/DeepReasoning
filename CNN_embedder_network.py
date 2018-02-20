@@ -123,6 +123,9 @@ class CNNEmbedder:
                 final_layer = conv1d(input_=dense_layer, output_dim=2*self.embedding_size, kernel_size=3,
                                      name="FinalLocalConv", relu=False, use_batch_norm=self.use_batch_norm,
                                      reuse=self.reuse_weights)
+                tf.summary.scalar(name="FinalLayer_Mean", tensor=tf.reduce_mean(final_layer))
+                tf.summary.scalar(name="FinalLayer_Max", tensor=tf.reduce_max(final_layer))
+                tf.summary.scalar(name="FinalLayer_Min", tensor=tf.reduce_min(final_layer))
                 final_layer = tf.nn.tanh(final_layer)   # Normalizing input between -1 and 1
 
             else:
@@ -158,7 +161,9 @@ class CNNEmbedder:
                     mean_feature = tf.reduce_mean(input_tensor=current_clause,
                                                   axis=1, keep_dims=True,
                                                   name=self.name + "_MeanPool_" + str(c))
-                    combined_feature = self.max_pool_prop * max_feature + (1 - self.max_pool_prop) * mean_feature
+                    mean_feature = tf.where(tf.is_nan(mean_feature), tf.zeros_like(mean_feature), mean_feature)
+                    # combined_feature = self.max_pool_prop * max_feature + (1 - self.max_pool_prop) * mean_feature
+                    combined_feature = max_feature
                     self.embedded_vector.append(combined_feature)
                 self.embedded_vector = tf.stack(values=self.embedded_vector, axis=0, name="EmbeddedVector")
 
@@ -200,8 +205,8 @@ class CNNEmbedder:
             #                                    initializer=tf.contrib.layers.xavier_initializer())
             # print(vocab_shape)
             if reuse_vocab:
-                self.vocab_table = GLOBAL_VOCAB
-                self.arity_table = GLOBAL_ARITIES
+                self.vocab_table = tf.stop_gradient(GLOBAL_VOCAB, name="StopVocabGradients")
+                self.arity_table = tf.stop_gradient(GLOBAL_ARITIES, name="StopAritiesGradients")
             else:
                 vocab_shape = [max(vocab_values) + vocab_offset, int(self.channel_size / 2)]
 

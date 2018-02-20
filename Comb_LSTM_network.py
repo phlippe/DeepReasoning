@@ -10,7 +10,7 @@ FC_LAYER_3 = "Comb_final"
 class CombLSTMNetwork:
     def __init__(self, embedding_size=1024, num_init_clauses=32, num_proof=4, num_train_clauses=32, num_shuffles=4,
                  weight0=1, weight1=1, name="CombLSTMNet", wavenet_blocks=1, wavenet_layers=2, comb_features=1024,
-                 embedding_net_type=NetType.STANDARD, dropout_rate_embedder=0.2, dropout_rate_fc=0.1,
+                 embedding_net_type=NetType.STANDARD, dropout_rate_embedder=0.2, dropout_rate_fc=0.0,
                  use_conversion=False):
 
         assert embedding_size > 0, "Number of channels for first layer has to be greater than 0!"
@@ -131,6 +131,7 @@ class CombLSTMNetwork:
         return [repeated_hidden_states, repeated_current_states]
 
     def embed_clauses(self):
+        # TODO: Think about combining both embedder due to less variations for negated conjecture (high loss for same examples)
         self.clause_embedder = CNNEmbedder(embedding_size=self.embedding_size, name="ClauseEmbedder",
                                            batch_size=self.batch_size + self.num_init_clauses * self.num_proof,
                                            char_number=None, net_type=self.embedding_net_type, tensor_height=1,
@@ -219,7 +220,7 @@ class CombLSTMNetwork:
             #         all_states.append(self.state_lstm_one)
             #     self.state_lstm_one = self.extract_states(all_states)
 
-            with tf.variable_scope("LSTM_INITIAL"):
+            with tf.variable_scope("LSTM_INITIAL") as vs:
                 # Prepare batch for LSTM. New shape: [Time, Proofs/Clauses, Clause-Features]
                 init_clause_lstm_batch = tf.stack(values=splitted_init_clauses, axis=1)
                 init_clause_lstm_batch = tf.reshape(tensor=init_clause_lstm_batch,
@@ -238,7 +239,13 @@ class CombLSTMNetwork:
                     _, self.state_lstm_initial = self.lstm_initial(batch,
                                                                    self.tuple_to_lstm_state(self.state_lstm_initial))
                     all_states.append(self.state_lstm_initial)
+
                 self.state_lstm_initial = self.extract_states(all_states)
+                # lstm_variables = tf.get_collection(tf.GraphKeys.VARIABLES, scope=vs.name)
+                # self.state_lstm_initial = tf.Print(self.state_lstm_initial,
+                #                                    [tf.reduce_max(lstm_var) for lstm_var in lstm_variables],
+                #                                    message="State Variables:",
+                #                                    summarize=8)
 
     def extract_states(self, all_states):
         with tf.name_scope("ExtractStates"):

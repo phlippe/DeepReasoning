@@ -14,6 +14,7 @@ from glob import glob
 from tensorflow.python.client import timeline
 import math
 import sys
+import pprint
 
 
 class EmbeddingTrainer:
@@ -71,8 +72,15 @@ class EmbeddingTrainer:
                                                    decay_steps=self.lr_decay_steps,
                                                    decay_rate=self.lr_decay_rate,
                                                    staircase=True)
-        optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(self.model.loss,
-                                                                                 global_step=global_step)
+
+        optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+        # optimizing = optimizer.minimize(self.model.loss,global_step=global_step)
+        gradients = optimizer.compute_gradients(self.model.loss)
+        with tf.name_scope("GradientAdjustment"):
+            pp = pprint.PrettyPrinter(indent=4)
+            pp.pprint("Gradients: "+str([(grad, var.name) for grad, var in gradients if 'NegConjectureEmbedder' in var.name]))
+            gradients = [(grad / 32.0, var) if 'NegConjectureEmbedder' in var.name else (grad, var) for grad, var in gradients]
+        optimizing = optimizer.apply_gradients(gradients, global_step=global_step)
 
         session_config = tf.ConfigProto(allow_soft_placement=True)
         init_op = initialize_tf_variables()
@@ -138,7 +146,7 @@ class EmbeddingTrainer:
                     self.model_trainer.run_model(sess, self.model, [self.model.loss, self.model.loss_zeros,
                                                                     self.model.loss_ones, self.model.all_losses,
                                                                     self.model.loss_regularization,
-                                                                    summary, optimizer], batch, is_training=True,
+                                                                    summary, optimizing], batch, is_training=True,
                                                  run_options=run_options, run_metadata=run_metadata)
 
                 if run_metadata is not None:
@@ -149,7 +157,7 @@ class EmbeddingTrainer:
                     with open('timeline_'+str(training_step).zfill(6)+'.json', 'w') as f:
                         f.write(chrome_trace)
 
-                if training_step % 50 == 0:
+                if training_step % 50 == 0 or math.isnan(loss):
                     train_writer.add_summary(sum_str, training_step)
                 print(
                         "Iters: [%5d|%5d], time: %4.4f, clause size: %2d|%2d, loss: %.5f, loss ones:%.5f, "
@@ -162,6 +170,9 @@ class EmbeddingTrainer:
 
                 if math.isnan(loss):
                     print("Loss is nan. Stopping training...")
+                    print("Batch: "+str(batch))
+                    print("Minimal clause length: "+np.min(batch[1]))
+                    print("Minimal negconj length: "+np.min(batch[3]))
                     sys.exit(1)
 
     def run_validation(self, sess):
