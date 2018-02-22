@@ -1,6 +1,7 @@
 import sys
 
 import numpy as np
+from create_conversion_vocab import generate_vocab_variables
 
 from ops import *
 from enum import Enum
@@ -209,29 +210,30 @@ class CNNEmbedder:
                 self.arity_table = tf.stop_gradient(GLOBAL_ARITIES, name="StopAritiesGradients")
             else:
                 vocab_shape = [max(vocab_values) + vocab_offset, int(self.channel_size / 2)]
-
-                # self.vocab_table = tf.Variable(initial_value=tf.random_uniform(shape=vocab_shape,
-                #                                                                minval=-1.0,
-                #                                                                maxval=1.0,
-                #                                                                dtype=tf.float32),
-                #                                trainable=True,
-                #                                name="Vocabs",
-                #                                expected_shape=vocab_shape,
-                #                                dtype=tf.float32)
-                self.vocab_table = get_vocab_variable(name="Vocabs", shape=vocab_shape)
-
                 arity_shape = [max_arity, int(self.channel_size / 2)]
-                # print(arity_shape)
-                # self.arity_table = tf.Variable(initial_value=tf.random_uniform(shape=arity_shape,
-                #                                                                minval=-1.0,
-                #                                                                maxval=1.0,
-                #                                                                dtype=tf.float32),
-                #                                trainable=True,
-                #                                name="Arities",
-                #                                expected_shape=arity_shape,
-                #                                dtype=tf.float32)
-                self.arity_table = get_vocab_variable(name="Arities", shape=arity_shape)
 
+                if not self.use_conversion:
+                    print("No conversion used")
+                    self.vocab_table = get_vocab_variable(name="Vocabs", shape=vocab_shape)
+                    self.arity_table = get_vocab_variable(name="Arities", shape=arity_shape)
+                else:
+                    print("Use conversion")
+                    voc_vars = np.array(generate_vocab_variables(vocab_shape[0], vocab_shape[1],
+                                                                 min_diffs=int(vocab_shape[1] / 2),
+                                                                 min_commons=int(vocab_shape[1] / 4)),
+                                        dtype=np.float32)
+                    self.vocab_table = tf.get_variable(name="Vocabs",
+                                                       initializer=tf.constant(voc_vars),
+                                                       trainable=False,
+                                                       dtype=tf.float32)
+                    arity_vars = np.array(generate_vocab_variables(arity_shape[0], arity_shape[1],
+                                                                   min_diffs=int(arity_shape[1] / 2),
+                                                                   min_commons=int(arity_shape[1] / 4)),
+                                          dtype=np.float32)
+                    self.arity_table = tf.get_variable(name="Arities",
+                                                       initializer=tf.constant(arity_vars),
+                                                       trainable=False,
+                                                       dtype=tf.float32)
                 GLOBAL_VOCAB = self.vocab_table
                 GLOBAL_ARITIES = self.arity_table
 
