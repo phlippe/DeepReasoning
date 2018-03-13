@@ -78,8 +78,9 @@ class EmbeddingTrainer:
         gradients = optimizer.compute_gradients(self.model.loss)
         with tf.name_scope("GradientAdjustment"):
             pp = pprint.PrettyPrinter(indent=4)
-            pp.pprint("Gradients: "+str([(grad, var.name) for grad, var in gradients if 'NegConjectureEmbedder' in var.name]))
+            pp.pprint("Gradients: "+str(gradients))
             gradients = [(grad / 32.0, var) if 'NegConjectureEmbedder' in var.name else (grad, var) for grad, var in gradients]
+            gradients = [(grad / 16.0, var) if 'Vocabulary' in var.name else (grad, var) for grad, var in gradients]
         optimizing = optimizer.apply_gradients(gradients, global_step=global_step)
 
         session_config = tf.ConfigProto(allow_soft_placement=True)

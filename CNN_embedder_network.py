@@ -226,14 +226,19 @@ class CNNEmbedder:
                                                        initializer=tf.constant(voc_vars),
                                                        trainable=False,
                                                        dtype=tf.float32)
-                    arity_vars = np.array(generate_vocab_variables(arity_shape[0], arity_shape[1],
-                                                                   min_diffs=int(arity_shape[1] / 2),
-                                                                   min_commons=int(arity_shape[1] / 4)),
-                                          dtype=np.float32)
-                    self.arity_table = tf.get_variable(name="Arities",
-                                                       initializer=tf.constant(arity_vars),
-                                                       trainable=False,
-                                                       dtype=tf.float32)
+
+                    self.arity_table = get_vocab_variable(name="Arities", shape=arity_shape)
+
+                    # arity_vars = np.array(generate_vocab_variables(arity_shape[0], arity_shape[1],
+                    #                                                min_diffs=int(arity_shape[1] / 2),
+                    #                                                min_commons=int(arity_shape[1] / 4)),
+                    #                       dtype=np.float32)
+                    # self.arity_table = tf.get_variable(name="Arities",
+                    #                                    initializer=tf.constant(arity_vars),
+                    #                                    trainable=False,
+                    #                                    dtype=tf.float32)
+                self.vocab_table = tf.add(self.vocab_table, 0.0, name="PreMultVocab")
+                self.arity_table = tf.add(self.arity_table, 0.0, name="PreMultArity")
                 GLOBAL_VOCAB = self.vocab_table
                 GLOBAL_ARITIES = self.arity_table
 

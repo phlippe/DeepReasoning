@@ -258,7 +258,7 @@ class CombLSTMNetwork:
 
     def tuple_to_lstm_state(self, state_tuple):
         with tf.name_scope("StateConversion"):
-            return state_tuple[0], tf.nn.tanh(state_tuple[0])
+            return state_tuple[0], tf.nn.tanh(state_tuple[0]) # tf.stop_gradient(tf.nn.tanh(state_tuple[0]))
 
     def short_state_extraction(self, all_states, state_index):
         state_tensor = tf.stack(values=[a[state_index] for a in all_states], axis=0)
