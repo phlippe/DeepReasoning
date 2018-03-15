@@ -417,8 +417,8 @@ class ClauseLoader:
 
 
 if __name__ == "__main__":
-    train_loader = ClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_", get_TPTP_train_files()))
-    val_loader = ClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_", get_TPTP_test_files()))
+    train_loader = ClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_", get_TPTP_train_files(Dataset.Best)))
+    val_loader = ClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_", get_TPTP_test_files(Dataset.Best)))
     all_proof_loader = train_loader.proof_loader + val_loader.proof_loader
     overall_vocab_use = dict()
     for loader in all_proof_loader:

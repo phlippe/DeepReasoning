@@ -169,8 +169,8 @@ class InitialClauseLoader:
 
 
 if __name__ == "__main__":
-    a = InitialClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_",
-                                                     get_TPTP_train_small()))
+    a = InitialClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/CombinedHeuristic/Best_",
+                                                     get_TPTP_train_files(Dataset.Best)))
     batch = a.get_batch(num_proofs=4, num_training_clauses=32, num_init_clauses=32)
     print("="*50+"\nClauses: "+str(batch[0].shape)+"\n"+str(batch[0]))
     print("="*50+"\nClauses length:"+str(batch[1].shape)+"\n"+str(batch[1]))

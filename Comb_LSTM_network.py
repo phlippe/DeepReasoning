@@ -131,7 +131,6 @@ class CombLSTMNetwork:
         return [repeated_hidden_states, repeated_current_states]
 
     def embed_clauses(self):
-        # TODO: Think about combining both embedder due to less variations for negated conjecture (high loss for same examples)
         self.clause_embedder = CNNEmbedder(embedding_size=self.embedding_size, name="ClauseEmbedder",
                                            batch_size=self.batch_size + self.num_init_clauses * self.num_proof,
                                            char_number=None, net_type=self.embedding_net_type, tensor_height=1,

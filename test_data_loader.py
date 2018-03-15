@@ -151,7 +151,7 @@ class TestClauseLoader:
 
 if __name__ == '__main__':
     a = TestClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_",
-                                                  get_TPTP_clause_test_files()))
+                                                  get_TPTP_clause_test_files(Dataset.Best)))
     b = a.get_all_batches(4, 32, 32)
     print("First labels:"+str(b[0][5]))
     print(a.print_out_results(b, [[1 for _ in range(128)] for _ in range(len(b))]))

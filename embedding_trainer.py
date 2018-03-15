@@ -7,7 +7,7 @@ import numpy as np
 from CNN_embedder_network import NetType
 from Comb_LSTM_trainer import CombLSTMTrainer
 from TPTP_train_val_files import get_TPTP_test_files, get_TPTP_train_files, convert_to_absolute_path, \
-    get_TPTP_test_small, get_TPTP_train_small, get_TPTP_clause_test_files
+    get_TPTP_test_small, get_TPTP_train_small, get_TPTP_clause_test_files, Dataset
 from model_trainer import ModelTrainer
 from ops import *
 from glob import glob
@@ -229,12 +229,22 @@ def start_training(args):
     elif args.dense:
         net_type = NetType.DILATED_DENSE_BLOCK
 
+    if args.dataset_best:
+        ds = Dataset.Best
+        prefix = "BestHeuristic/Best_"
+    elif args.dataset_clause_weight:
+        ds = Dataset.ClauseWeight
+        prefix = "Training/ClauseWeight_"
+    else:
+        ds = Dataset.ClauseWeight
+        prefix = "Training/ClauseWeight_"
+
     modtr = CombLSTMTrainer(
-        train_files=convert_to_absolute_path(args.path + "datasets/Cluster/Training/ClauseWeight_",
-                                             get_TPTP_train_files() if not args.small_files else get_TPTP_train_small()),
-        val_files=convert_to_absolute_path(args.path + "datasets/Cluster/Training/ClauseWeight_",
-                                           get_TPTP_test_files() if not args.small_files else get_TPTP_test_small()),
-        test_files=convert_to_absolute_path(args.path + "datasets/Cluster/Training/ClauseWeight_",
+        train_files=convert_to_absolute_path(args.path + "datasets/Cluster/" + prefix,
+                                             get_TPTP_train_files(ds) if not args.small_files else get_TPTP_train_small()),
+        val_files=convert_to_absolute_path(args.path + "datasets/Cluster/" + prefix,
+                                           get_TPTP_test_files(ds) if not args.small_files else get_TPTP_test_small()),
+        test_files=convert_to_absolute_path(args.path + "datasets/Cluster/" + prefix,
                                             get_TPTP_clause_test_files()),
         num_proofs=args.num_proofs,
         num_training_clauses=args.num_training,
@@ -299,6 +309,10 @@ if __name__ == '__main__':
                         help='Decay rate by which the learning rate is reduced per decay steps (see --lr_decay_steps)')
     parser.add_argument('-conv', '--conversion', action="store_true",
                         help='Whether vocabulary should be converted to a standard small one or not')
+    parser.add_argument('-dbest', '--dataset_best', action="store_true",
+                        help='Whether to use the dataset of best E-Prover configuration')
+    parser.add_argument('-dcl', '--dataset_clause_weight', action="store_true",
+                        help='Whether to use the dataset of solely ClauseWeight Heuristic')
 
     args = parser.parse_args()
 

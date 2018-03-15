@@ -7,9 +7,9 @@ from CNN_embedder_network import CNNEmbedder
 # ClauseWeight - /home/phillip/datasets/Cluster/*/*/E-Prover_TF_Very_Silent___E---2.0_G----_0003_C18_F1_SE_CS_SP_S0Y/*/*.txt
 # Best - /home/phillip/datasets/Cluster/*/*/E-Prover_TF_Very_Silent___E---2.0_G-E--_208_C18_F1_SE_CS_SP_PS_S0Y/*/*.txt
 
-ALL_FILES = sorted(glob("/home/phillip/datasets/Cluster/Job25658_output/*/E-Prover_TF_*___E---2.0_G----_0003_C18_F1_SE_CS_SP_S0Y/REL015-1*/*.txt"))
-OUTPUT_DIR = "/home/phillip/datasets/Cluster/InitClauses/"
-PREFIX = "ClauseWeight_"
+ALL_FILES = sorted(glob("/home/phillip/datasets/Cluster/Job25658_output/*/E-Prover_TF_*/*/*.txt"))
+OUTPUT_DIR = "/home/phillip/datasets/Cluster/FullInitClauses/"
+PREFIX = "Best_"
 VOCAB_CODES = CNNEmbedder.get_vocabulary(use_conversion=False).values()
 if not os.path.exists(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR)
@@ -46,8 +46,8 @@ def test_line(line_text):
 wrong_vocab = 0
 resource_out = 0
 for file in ALL_FILES:
-    print("Extracting "+file+"...")
-    file_name = PREFIX + file.split("/")[-2].split(".")[0]
+    file_name = PREFIX + file.split("/")[-2].rsplit(".", 1)[0].replace(".", "-")
+    print("Extracting "+file+" to "+file_name+"...")
     output_pos_file = os.path.join(OUTPUT_DIR, file_name+"_pos.txt")
     output_neg_file = os.path.join(OUTPUT_DIR, file_name+"_neg.txt")
     output_conj_file = os.path.join(OUTPUT_DIR, file_name+"_conj.txt")
