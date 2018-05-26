@@ -90,8 +90,8 @@ class EmbeddingTrainer:
             sess.run(init_op)
             load_directory = sorted(glob(os.path.join(self.checkpoint_dir, "*")))
             print("All load directories: "+str(load_directory))
-            load_directory = load_directory[-1]
-            if self.loading_model and load_model(saver, sess, load_directory):
+            #load_directory = load_directory[-1]
+            if self.loading_model and load_model(saver, sess, load_directory[-1]):
                 print(" [*] Load model - SUCCESS")
                 start_iter = sess.run(global_step.read_value())
             elif self.loading_model:
@@ -99,7 +99,7 @@ class EmbeddingTrainer:
             elif self.load_vocab:
                 vocab_saver = tf.train.Saver({"CombLSTMNet/Vocabulary/Vocabs": self.model.clause_embedder.vocab_table,
                                               "CombLSTMNet/Vocabulary/Arities": self.model.clause_embedder.arity_table})
-                if load_model(vocab_saver, sess, load_directory):
+                if load_model(vocab_saver, sess, load_directory[-1]):
                     print(" [*] Load vocabulary - SUCCESS")
                 else:
                     print(" [!] Load vocabulary - failed...")
@@ -137,7 +137,7 @@ class EmbeddingTrainer:
 
                 start_time = time.time()
                 batch = self.model_trainer.get_train_batch(self.batch_size)
-                if training_step % 2000 == 5:
+                if False and training_step % 2000 == 5:
                     run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                     run_metadata = tf.RunMetadata()
                 else:
@@ -231,13 +231,13 @@ def start_training(args):
 
     if args.dataset_best:
         ds = Dataset.Best
-        prefix = "BestHeuristic/Best_"
+        prefix = "BestWithUnprocessed/Best_"
     elif args.dataset_clause_weight:
         ds = Dataset.ClauseWeight
-        prefix = "Training/ClauseWeight_"
+        prefix = "TrainingWithUnprocessed/ClauseWeight_"
     else:
         ds = Dataset.ClauseWeight
-        prefix = "Training/ClauseWeight_"
+        prefix = "TrainingWithUnprocessed/ClauseWeight_"
 
     modtr = CombLSTMTrainer(
         train_files=convert_to_absolute_path(args.path + "datasets/Cluster/" + prefix,

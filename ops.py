@@ -292,6 +292,8 @@ def save_model(saver, sess, checkpoint_dir, step, model_name):
     if not os.path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir)
     saver.save(sess, os.path.join(checkpoint_dir, model_name), global_step=step)
+    #print("DilConv3: "+str(tf.get_default_graph().get_tensor_by_name('CombLSTMNet/NegConjectureEmbedder/DilatedDenseBlock/DilConv3/w:0').eval()))
+    #print("Variables:" + str(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)))
 
 
 def load_model(saver, sess, checkpoint_dir, model_name=None):
@@ -382,17 +384,17 @@ def weighted_BCE_loss(predictions, labels, weight0=1, weight1=1):
 def log_loss_function(value):
     epsilon = tf.constant(math.e**(-5), dtype=tf.float32, name="epsilon")
     inner_log = tf.minimum(tf.pow(value, 1.5) + epsilon, (value + 1.0) / 2.0)
-    return tf.log(inner_log)*focal_loss_modulation(value)
+    return tf.log(inner_log)*focal_loss_modulation(value, exponent=0.5)
 
 
 def shortened_loss_function(value):
     # loss(0) = -1
     # loss(1) = 0
-    return tf.log(((1 + value * (math.e - 1)) / math.e))*focal_loss_modulation(value)
+    return tf.log(((1 + value * (math.e - 1)) / math.e))*focal_loss_modulation(value, exponent=0.75)
 
 
-def focal_loss_modulation(value):
-    return tf.pow(tf.clip_by_value(1-value, 0.05, 0.95), 0.5)
+def focal_loss_modulation(value, exponent=0.5):
+    return tf.pow(tf.clip_by_value(1-value, 0.01, 1.0), exponent)
 
 
 def weight_decay_loss():

@@ -6,6 +6,7 @@ import sys
 import numpy as np
 import math
 import json
+import os
 from CNN_embedder_network import CNNEmbedder
 
 from data_augmenter import DataAugmenter, DefaultAugmenter
@@ -23,14 +24,16 @@ LABEL_NEGATIVE = 1
 
 class ProofExampleLoader:
     def __init__(self, file_prefix=None, use_conversion=False):
-        self.pos_examples = []
-        self.neg_examples = []
-        self.init_clauses = []
-        self.neg_conjecture = []
-        self.pos_indices = []
-        self.neg_indices = []
+        self.pos_examples = list()
+        self.neg_examples = list()
+        self.init_clauses = list()
+        self.neg_conjecture = list()
+        self.pos_indices = list()
+        self.neg_indices = list()
+        self.unp_indices = list()
         self.pos_index = 0
         self.neg_index = 0
+        self.unp_index = 0
         self.prefix = file_prefix
         self.all_vocabs = None
         self.base_vocab = None
@@ -42,7 +45,9 @@ class ProofExampleLoader:
         if file_prefix is not None:
             self.pos_examples = ProofExampleLoader.read_file(file_prefix, "pos")
             self.neg_examples = ProofExampleLoader.read_file(file_prefix, "neg")
+            self.unp_examples = ProofExampleLoader.read_file(file_prefix, "unp")
             self.init_clauses = ProofExampleLoader.read_file(file_prefix, "init")
+            self.p_neg = (self.get_number_of_negatives() + self.get_number_of_unprocessed() / 4.0) * 1.0 / (self.get_number_of_negatives() + self.get_number_of_unprocessed() + 1e-10)
 
             try:
                 with open(file_prefix + "_conj.txt", "r") as f:
@@ -74,6 +79,7 @@ class ProofExampleLoader:
                 print("[!] ERROR CONJ: "+str(e))
                 self.neg_conjecture = []
 
+            self.create_own_vocab()
             if self.use_conversion:
                 try:
                     self.analyse_vocab()
@@ -83,16 +89,18 @@ class ProofExampleLoader:
 
     @staticmethod
     def read_file(file_prefix, file_postfix):
-        all_lines = []
-        with open(file_prefix + "_"+file_postfix+".txt", "r") as f:
-            for line in f:
-                line = line.split(",")
-                if line and line[0] is not '\n':
-                    try:
-                        line = [int(i) for i in line]
-                        all_lines.append(line)
-                    except ValueError as e:
-                        print("[!] ERROR "+file_postfix.upper()+": "+str(e))
+        all_lines = list()
+        file_to_read = file_prefix + "_"+file_postfix+".txt"
+        if os.path.isfile(file_to_read):
+            with open(file_to_read, "r") as f:
+                for line in f:
+                    line = line.split(",")
+                    if line and line[0] is not '\n' and len(line) <= 150:
+                        try:
+                            line = [int(i) for i in line]
+                            all_lines.append(line)
+                        except ValueError as e:
+                            print("[!] ERROR "+file_postfix.upper()+": "+str(e))
         return all_lines
 
     def permute_positives(self):
@@ -102,6 +110,10 @@ class ProofExampleLoader:
     def permute_negatives(self):
         self.neg_indices = np.random.permutation(len(self.neg_examples))
         self.neg_index = 0
+
+    def permute_unprocessed(self):
+        self.unp_indices = np.random.permutation(len(self.unp_examples))
+        self.unp_index = 0
 
     def get_positive(self):
         if self.pos_index >= len(self.pos_examples):
@@ -113,12 +125,19 @@ class ProofExampleLoader:
         return c
 
     def get_negative(self):
-        if self.neg_index >= len(self.neg_examples):
-            self.permute_negatives()
-        c = self.neg_examples[self.neg_index]
+        rand_choice = np.random.choice([0, 1], size=1, p=[self.p_neg, 1 - self.p_neg])
+        if (rand_choice == 0 or self.get_number_of_unprocessed() == 0) and self.get_number_of_negatives() > 0:
+            if self.neg_index >= len(self.neg_examples):
+                self.permute_negatives()
+            c = self.neg_examples[self.neg_index]
+            self.neg_index += 1
+        else:
+            if self.unp_index >= len(self.unp_examples):
+                self.permute_unprocessed()
+            c = self.unp_examples[self.unp_index]
+            self.unp_index += 1
         if self.use_conversion:
             c = [self.active_conversion[voc] for voc in c]
-        self.neg_index += 1
         return c
 
     def get_init_clauses(self, size):
@@ -146,6 +165,9 @@ class ProofExampleLoader:
     def get_number_of_negatives(self):
         return len(self.neg_examples)
 
+    def get_number_of_unprocessed(self):
+        return len(self.unp_examples)
+
     def get_average_clause_length(self):
         pos_length = sum([len(c) for c in self.pos_examples]) / (len(self.pos_examples) if len(self.pos_examples) > 0 else 1)
         neg_length = sum([len(c) for c in self.neg_examples]) / (len(self.neg_examples) if len(self.neg_examples) > 0 else 1)
@@ -163,13 +185,18 @@ class ProofExampleLoader:
         neg_dict = OrderedDict(sorted((x, neg_length.count(x)) for x in set(neg_length)))
         return [pos_dict, neg_dict]
 
-    def analyse_vocab(self):
+    def create_own_vocab(self):
         all_pos_vocabs = np.unique(np.array([c for clause in self.pos_examples for c in clause]))
         all_neg_vocabs = np.unique(np.array([c for clause in self.neg_examples for c in clause]))
         all_init_vocabs = np.unique(np.array([c for clause in self.init_clauses for c in clause]))
         all_neg_conj_vocabs = np.unique(np.array(self.neg_conjecture))
-        self.all_vocabs = list(np.unique(np.concatenate([all_pos_vocabs, all_neg_vocabs, all_init_vocabs, all_neg_conj_vocabs], axis=0)))
+        self.all_vocabs = list(
+            np.unique(np.concatenate([all_pos_vocabs, all_neg_vocabs, all_init_vocabs, all_neg_conj_vocabs], axis=0)))
 
+    def get_vocab(self):
+        return self.all_vocabs
+
+    def analyse_vocab(self):
         with open("Vocabs.txt", 'r') as vocab_file:
             base_vocab = json.load(vocab_file)
         self.base_vocab = {v: k for k, v in base_vocab.items()}
@@ -377,9 +404,11 @@ class ClauseLoader:
     def print_loader_statistic(proof_loader):
         overall_neg = 0
         overall_pos = 0
+        overall_unp = 0
         for loader in proof_loader:
             overall_neg += loader.get_number_of_negatives()
             overall_pos += loader.get_number_of_positives()
+            overall_unp += loader.get_number_of_unprocessed()
         avg_pos_len = 0
         avg_neg_len = 0
         greatest_pos_len = 0
@@ -400,6 +429,7 @@ class ClauseLoader:
         print("Positive: "+str(overall_pos))
         print("Average length: "+str(avg_pos_len))
         print("Greatest: "+str(greatest_pos_len))
+        print("Unprocessed: "+str(overall_unp))
         print("Without Negated Conjecture: "+str(no_neg_conj))
 
     @staticmethod

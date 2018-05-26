@@ -162,8 +162,9 @@ class CNNEmbedder:
                     mean_feature = tf.reduce_mean(input_tensor=current_clause,
                                                   axis=1, keep_dims=True,
                                                   name=self.name + "_MeanPool_" + str(c))
-                    mean_feature = tf.where(tf.is_nan(mean_feature), tf.zeros_like(mean_feature), mean_feature)
-                    # combined_feature = self.max_pool_prop * max_feature + (1 - self.max_pool_prop) * mean_feature
+                    # mean_feature = tf.where(tf.is_nan(mean_feature), tf.zeros_like(mean_feature), mean_feature)
+                    # max_pool_prop = 0.75 * tf.pow(self.input_length[c] / 120.0, 2)
+                    # combined_feature = max_pool_prop * max_feature + (1 - max_pool_prop) * mean_feature
                     combined_feature = max_feature
                     self.embedded_vector.append(combined_feature)
                 self.embedded_vector = tf.stack(values=self.embedded_vector, axis=0, name="EmbeddedVector")
@@ -276,6 +277,7 @@ class CNNEmbedder:
             keys = list(keys)
         values_offset = - min(values)
         values = [values[i] + values_offset for i in range(len(values))]  # All greater than 0
+        values, keys = (list(t) for t in zip(*sorted(zip(values, keys))))
         return values, keys, values_offset
 
     @staticmethod

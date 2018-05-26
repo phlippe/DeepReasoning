@@ -3,6 +3,7 @@ from data_loader import ClauseLoader, get_clause_lengths
 import math
 import numpy as np
 from TPTP_train_val_files import *
+from data_augmenter import DataAugmenter
 
 
 LABEL_POSITIVE = 0
@@ -12,16 +13,17 @@ LABEL_NEGATIVE = 1
 class TestClauseLoader:
 
     def __init__(self, file_list, empty_char=5, max_clause_len=150, max_neg_conj_len=-1, use_conversion=False):
-            self.empty_char = int(empty_char)
-            self.proof_loader = []
-            self.max_clause_len = max_clause_len
-            if max_neg_conj_len <= 0:
-                self.max_neg_conj_len = self.max_clause_len
-            else:
-                self.max_neg_conj_len = max_neg_conj_len
+        self.empty_char = int(empty_char)
+        self.proof_loader = []
+        self.max_clause_len = max_clause_len
+        if max_neg_conj_len <= 0:
+            self.max_neg_conj_len = self.max_clause_len
+        else:
+            self.max_neg_conj_len = max_neg_conj_len
 
-            self.proof_loader = ClauseLoader.initialize_proof_loader(
-                [f for f in file_list if 'ClauseWeight_LCL' not in f], use_conversion=use_conversion)
+        self.proof_loader = ClauseLoader.initialize_proof_loader(
+            [f for f in file_list if 'ClauseWeight_LCL' not in f], use_conversion=use_conversion)
+        self.augmenter = DataAugmenter(use_conversion=use_conversion)
 
     def get_all_batches(self, num_proofs, num_training_clauses, num_init_clauses):
         global LABEL_NEGATIVE, LABEL_POSITIVE
@@ -47,6 +49,12 @@ class TestClauseLoader:
                 clause_labels.append(LABEL_POSITIVE)
             for _ in range(proof.get_number_of_negatives()):
                 proof_clauses.append(proof.get_negative())
+                clause_labels.append(LABEL_NEGATIVE)
+            for _ in range(proof.get_number_of_positives()):
+                proof_clauses.append(self.augmenter.augment_positive_to_negative(proof.get_positive(), proof.get_vocab()))
+                clause_labels.append(LABEL_NEGATIVE)
+            for _ in range(10):
+                proof_clauses.append(self.augmenter.augment_positive_to_negative([], proof.get_vocab()))
                 clause_labels.append(LABEL_NEGATIVE)
             needed_sub_batches = int(math.ceil(len(proof_clauses) / num_training_clauses))
             for s in range(needed_sub_batches):

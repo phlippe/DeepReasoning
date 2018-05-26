@@ -105,22 +105,38 @@ class InitialClauseLoader:
             init_clause_lengths[p] = min(proof.get_number_init_clauses(), num_init_clauses)
             # One negated conjecture per proof
             batch_neg_conj.append(proof.get_negated_conjecture())
+
+            # pos_next = np.random.choice(a=[0, 1], size=num_training_clauses, p=[1 - self.prob_pos, self.prob_pos])
+            # No randomness, because it does not help the network and the loss function is optimized for exactly
+            # self.prob_pos*num_training_clauses positive clauses
+            pos_next = np.zeros(shape=num_training_clauses)
+            number_of_positive_clauses = int(math.ceil(self.prob_pos*num_training_clauses))
+            pos_next[:number_of_positive_clauses] = 1
+
+            use_random_clauses = np.zeros(shape=num_training_clauses)
             if proof.get_number_of_negatives() == 0:
-                pos_next = np.zeros(shape=num_training_clauses) + 1
+                use_random_clauses = use_random_clauses + 1
             elif proof.get_number_of_positives() == 0:
                 pos_next = np.zeros(shape=num_training_clauses)
+                use_random_clauses = use_random_clauses + 1
+            elif proof.get_number_of_negatives() < (num_training_clauses - number_of_positive_clauses):
+                use_random_clauses[(num_training_clauses - number_of_positive_clauses):] = 1
             else:
-                # pos_next = np.random.choice(a=[0, 1], size=num_training_clauses, p=[1 - self.prob_pos, self.prob_pos])
-                # No randomness, because it does not help the network and the loss function is optimized for exactly
-                # self.prob_pos*num_training_clauses positive clauses
-                pos_next = np.zeros(shape=num_training_clauses)
-                pos_next[:int(math.ceil(self.prob_pos*num_training_clauses))] = 1
+                prob_rand = 1.0/64.0
+                use_random_clauses = np.random.choice(a=[0, 1], size=num_training_clauses, p=[1-prob_rand, prob_rand])
+
             for c in range(num_training_clauses):
                 if pos_next[c] == 1:
                     training_clauses.append(proof.get_positive())
                     labels[p*num_training_clauses+c] = LABEL_POSITIVE
                 else:
-                    training_clauses.append(proof.get_negative())
+                    if use_random_clauses[c] == 1:
+                        training_clauses.append(self.augmenter.augment_positive_to_negative([], proof.get_vocab()))
+                    # elif c % (num_training_clauses / 4) == 0:
+                    #     training_clauses.append(self.augmenter.augment_positive_to_negative(proof.get_positive(),
+                    #                                                                         proof.get_vocab()))
+                    else:
+                        training_clauses.append(proof.get_negative())
                     labels[p*num_training_clauses+c] = LABEL_NEGATIVE
         # Augment all clauses
         initial_clauses = [self.augmenter.augment_clause(clause) for sublist in initial_clauses for clause in sublist]

@@ -45,7 +45,7 @@ class CombLSTMTrainer(ModelTrainer):
     def create_model(self, batch_size, embedding_size):
         combined_network = CombLSTMNetwork(num_proof=self.num_proofs, num_train_clauses=self.num_training_clauses,
                                            num_shuffles=self.num_shuffles, num_init_clauses=self.num_initial_clauses,
-                                           weight0=1, weight1=1.1, embedding_net_type=self.embedding_net_type,
+                                           weight0=1, weight1=1.25, embedding_net_type=self.embedding_net_type,
                                            wavenet_blocks=self.wavenet_blocks, wavenet_layers=self.wavenet_layers,
                                            embedding_size=512, comb_features=1024, dropout_rate_embedder=0.2,
                                            dropout_rate_fc=0.1, use_conversion=self.use_conversion)
