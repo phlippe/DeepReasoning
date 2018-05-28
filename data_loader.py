@@ -14,12 +14,17 @@ from TPTP_train_val_files import *
 if sys.version_info[0] < 3:
     print(" [!] ERROR: Could not import module thread. Python version "+str(sys.version_info))
     sys.exit(1)
-    # from thread import start_new_thread
+    #from thread import start_new_thread
 else:
     from _thread import start_new_thread
+    #pass
 
 LABEL_POSITIVE = 0
 LABEL_NEGATIVE = 1
+IS_UNPROCESSED_INDEX = "is_unp"
+EXAMPLE_INDEX = "index"
+BATCH_NEGATIVE_INDEX = "neg"
+BATCH_POSITIVE_INDEX = "pos"
 
 
 class ProofExampleLoader:
@@ -31,6 +36,7 @@ class ProofExampleLoader:
         self.pos_indices = list()
         self.neg_indices = list()
         self.unp_indices = list()
+        self.current_batches = list()
         self.pos_index = 0
         self.neg_index = 0
         self.unp_index = 0
@@ -47,7 +53,14 @@ class ProofExampleLoader:
             self.neg_examples = ProofExampleLoader.read_file(file_prefix, "neg")
             self.unp_examples = ProofExampleLoader.read_file(file_prefix, "unp")
             self.init_clauses = ProofExampleLoader.read_file(file_prefix, "init")
+
+            self.pos_loss_list = np.array([-1.0 for _ in self.pos_examples])
+            self.neg_loss_list = np.array([-1.0 for _ in self.neg_examples] + [-1.0 for _ in self.unp_examples])
+
             self.p_neg = (self.get_number_of_negatives() + self.get_number_of_unprocessed() / 4.0) * 1.0 / (self.get_number_of_negatives() + self.get_number_of_unprocessed() + 1e-10)
+            self.permute_positives()
+            self.permute_negatives()
+            self.permute_unprocessed()
 
             try:
                 with open(file_prefix + "_conj.txt", "r") as f:
@@ -103,6 +116,60 @@ class ProofExampleLoader:
                             print("[!] ERROR "+file_postfix.upper()+": "+str(e))
         return all_lines
 
+    def new_batch(self):
+        new_batch = dict()
+        new_batch[BATCH_POSITIVE_INDEX] = list()
+        new_batch[BATCH_NEGATIVE_INDEX] = list()
+        self.current_batches.append(new_batch)
+
+    def add_example_to_batch(self, index, example, is_unprocessed=False):
+        if index == BATCH_NEGATIVE_INDEX:
+            self.current_batches[-1][index].append(
+                {EXAMPLE_INDEX: example, IS_UNPROCESSED_INDEX: is_unprocessed})
+        elif index == BATCH_POSITIVE_INDEX:
+            self.current_batches[-1][index].append(example)
+        else:
+            print("[!] ERROR: Could not add clause example to batch. Unknown index: "+str(index))
+
+    def loss_to_batch(self, loss_list):
+        batch_to_process = self.current_batches[0]
+        number_of_positives = len(batch_to_process[BATCH_POSITIVE_INDEX])
+        # print("Number of positives: "+str(number_of_positives))
+        # print("Number of negatives overall: "+str(self.get_number_of_negatives()))
+        # print("Loss list: "+str(loss_list))
+        for i in range(number_of_positives):
+            pos_index = batch_to_process[BATCH_POSITIVE_INDEX][i]
+            self.pos_loss_list[pos_index] = loss_list[i]
+        for i in range(len(loss_list) - number_of_positives):
+            neg_index = batch_to_process[BATCH_NEGATIVE_INDEX][i][EXAMPLE_INDEX]
+            # print("Neg index: "+str(neg_index))
+            is_unprocessed = batch_to_process[BATCH_NEGATIVE_INDEX][i][IS_UNPROCESSED_INDEX]
+            if is_unprocessed:
+                self.neg_loss_list[self.get_number_of_negatives()+neg_index] = loss_list[i+number_of_positives]
+            else:
+                self.neg_loss_list[neg_index] = loss_list[i+number_of_positives]
+        del self.current_batches[0]
+
+    def get_argmax_negatives(self, number_of_clauses):
+        argmax_list = np.argsort(self.neg_loss_list)[-number_of_clauses:]
+        clause_list = list()
+        for ind in argmax_list:
+            if ind >= self.get_number_of_negatives():
+                self.add_example_to_batch(BATCH_NEGATIVE_INDEX, ind-self.get_number_of_negatives(), is_unprocessed=True)
+                clause_list.append(self.unp_examples[ind-self.get_number_of_negatives()])
+            else:
+                self.add_example_to_batch(BATCH_NEGATIVE_INDEX, ind, is_unprocessed=False)
+                clause_list.append(self.neg_examples[ind])
+        return clause_list
+
+    def get_argmax_positives(self, number_of_clauses):
+        argmax_list = np.argsort(self.pos_loss_list)[-number_of_clauses:]
+        clause_list = list()
+        for ind in argmax_list:
+            self.add_example_to_batch(BATCH_POSITIVE_INDEX, ind)
+            clause_list.append(self.pos_examples[ind])
+        return clause_list
+
     def permute_positives(self):
         self.pos_indices = np.random.permutation(len(self.pos_examples))
         self.pos_index = 0
@@ -118,7 +185,8 @@ class ProofExampleLoader:
     def get_positive(self):
         if self.pos_index >= len(self.pos_examples):
             self.permute_positives()
-        c = self.pos_examples[self.pos_index]
+        c = self.pos_examples[self.pos_indices[self.pos_index]]
+        self.add_example_to_batch(BATCH_POSITIVE_INDEX, self.pos_indices[self.pos_index])
         if self.use_conversion:
             c = [self.active_conversion[voc] for voc in c]
         self.pos_index += 1
@@ -129,12 +197,14 @@ class ProofExampleLoader:
         if (rand_choice == 0 or self.get_number_of_unprocessed() == 0) and self.get_number_of_negatives() > 0:
             if self.neg_index >= len(self.neg_examples):
                 self.permute_negatives()
-            c = self.neg_examples[self.neg_index]
+            c = self.neg_examples[self.neg_indices[self.neg_index]]
+            self.add_example_to_batch(BATCH_NEGATIVE_INDEX, self.neg_indices[self.neg_index], is_unprocessed=False)
             self.neg_index += 1
         else:
             if self.unp_index >= len(self.unp_examples):
                 self.permute_unprocessed()
-            c = self.unp_examples[self.unp_index]
+            c = self.unp_examples[self.unp_indices[self.unp_index]]
+            self.add_example_to_batch(BATCH_NEGATIVE_INDEX, self.unp_indices[self.unp_index], is_unprocessed=True)
             self.unp_index += 1
         if self.use_conversion:
             c = [self.active_conversion[voc] for voc in c]
@@ -446,19 +516,46 @@ class ClauseLoader:
 # print(a.get_batch(128))
 
 
+def test_proof_loader():
+    proof_loader = ProofExampleLoader("clause_data/example2")
+    for _ in range(2):
+        proof_loader.new_batch()
+        print("Loss list: "+str(proof_loader.loss_list))
+        clauses = list()
+        for _ in range(8):
+            clauses.append(proof_loader.get_positive())
+        for _ in range(24):
+            clauses.append(proof_loader.get_negative())
+        for i in range(len(clauses)):
+            print("Clause "+str(i)+": "+str(clauses[i]))
+    proof_loader.loss_to_batch(np.array([a*1.0/32.0 for a in range(32)]))
+    proof_loader.loss_to_batch(np.array([a*1.0/32.0 for a in range(32)]))
+    print("Loss list: "+str(proof_loader.loss_list))
+    proof_loader.new_batch()
+    clauses = list()
+    for _ in range(8):
+        clauses.append(proof_loader.get_positive())
+    argmax_clauses = proof_loader.get_argmax_negatives(8)
+    for i in range(len(argmax_clauses)):
+        print("Argmax clause "+str(i)+": "+str(argmax_clauses[i]))
+
+
+
+
 if __name__ == "__main__":
-    train_loader = ClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_", get_TPTP_train_files(Dataset.Best)))
-    val_loader = ClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_", get_TPTP_test_files(Dataset.Best)))
-    all_proof_loader = train_loader.proof_loader + val_loader.proof_loader
-    overall_vocab_use = dict()
-    for loader in all_proof_loader:
-        ar_dict = loader.get_arity_distribution()
-        for k, v in ar_dict.items():
-            if k in overall_vocab_use:
-                overall_vocab_use[k] = max(overall_vocab_use[k], v)
-            else:
-                overall_vocab_use[k] = v
-            if v > 100:
-                print("Found greater 100 ("+loader.prefix+")")
-    print("Number of loaders: "+str(len(all_proof_loader)))
-    print("Overall vocab dict: "+str(overall_vocab_use))
+    test_proof_loader()
+    # train_loader = ClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_", get_TPTP_train_files(Dataset.Best)))
+    # val_loader = ClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_", get_TPTP_test_files(Dataset.Best)))
+    # all_proof_loader = train_loader.proof_loader + val_loader.proof_loader
+    # overall_vocab_use = dict()
+    # for loader in all_proof_loader:
+    #     ar_dict = loader.get_arity_distribution()
+    #     for k, v in ar_dict.items():
+    #         if k in overall_vocab_use:
+    #             overall_vocab_use[k] = max(overall_vocab_use[k], v)
+    #         else:
+    #             overall_vocab_use[k] = v
+    #         if v > 100:
+    #             print("Found greater 100 ("+loader.prefix+")")
+    # print("Number of loaders: "+str(len(all_proof_loader)))
+    # print("Overall vocab dict: "+str(overall_vocab_use))

@@ -45,7 +45,7 @@ class CombLSTMTrainer(ModelTrainer):
     def create_model(self, batch_size, embedding_size):
         combined_network = CombLSTMNetwork(num_proof=self.num_proofs, num_train_clauses=self.num_training_clauses,
                                            num_shuffles=self.num_shuffles, num_init_clauses=self.num_initial_clauses,
-                                           weight0=1, weight1=1.25, embedding_net_type=self.embedding_net_type,
+                                           weight0=1.1, weight1=1, embedding_net_type=self.embedding_net_type,
                                            wavenet_blocks=self.wavenet_blocks, wavenet_layers=self.wavenet_layers,
                                            embedding_size=512, comb_features=1024, dropout_rate_embedder=0.2,
                                            dropout_rate_fc=0.1, use_conversion=self.use_conversion)
@@ -90,6 +90,7 @@ class CombLSTMTrainer(ModelTrainer):
             if i > 0:
                 s += ", "
             proof_loss = np.mean(all_losses[i * proof_size:(i + 1) * proof_size])
+            self.train_loader.proof_loader[self.batch_proofs[i]].loss_to_batch(all_losses[i * proof_size:(i + 1) * proof_size])
             all_proof_losses.append(proof_loss)
             file_name = self.train_loader.proof_loader[self.batch_proofs[i]].prefix.split("/", -1)[-1].split("_")[-1]
             all_files.append(file_name)

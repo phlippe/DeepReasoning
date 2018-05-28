@@ -40,6 +40,7 @@ class TestClauseLoader:
         for p in range(len(self.proof_loader)):
             proof = self.proof_loader[p]
             # Prepare initial clauses
+            proof.new_batch()
             ic = proof.get_init_clauses(num_init_clauses)
 
             proof_clauses = []

@@ -9,6 +9,8 @@ def main(test_files):
     best_acc_neg = 0
     best_file = "None"
     for file in test_files:
+        if not int(file.split("_")[-1].split(".")[0]) % 2000 == 0:
+            continue
         print("="*40)
         print(file)
         print("="*40)

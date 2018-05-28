@@ -184,7 +184,7 @@ class EmbeddingTrainer:
                                                                            [self.model.loss, self.model.loss_ones,
                                                                             self.model.loss_zeros], batch,
                                                                            is_training=False)
-            avg_loss += np.array([loss_all, loss_ones, loss_zeros])
+            avg_loss += np.array([loss_ones * 0.75 + loss_zeros * 0.25, loss_ones, loss_zeros])
         avg_loss = avg_loss / self.val_batch_number
         print("#" * 125)
         print("VALIDATION [%d batches] - Overall loss: %.8f, loss ones: %.8f, loss zeros: %.8f" % (

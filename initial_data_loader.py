@@ -97,6 +97,7 @@ class InitialClauseLoader:
         for p in range(num_proofs):
             proof_ind = self.get_proof()
             proof = self.proof_loader[proof_ind]
+            proof.new_batch()
             proof.shuffle_conversion()
             proofs_chosen.append(proof_ind)
             # Prepare initial clauses
@@ -111,30 +112,45 @@ class InitialClauseLoader:
             # self.prob_pos*num_training_clauses positive clauses
             pos_next = np.zeros(shape=num_training_clauses)
             number_of_positive_clauses = int(math.ceil(self.prob_pos*num_training_clauses))
-            pos_next[:number_of_positive_clauses] = 1
+            if proof.get_number_of_positives() > 0:
+                pos_next[:number_of_positive_clauses] = 1
+            argmax_negatives = proof.get_argmax_negatives(int(math.ceil(0.25*(1-self.prob_pos)*num_training_clauses)))
+            argmax_positives = proof.get_argmax_positives(int(math.ceil(0.25*self.prob_pos*num_training_clauses)))
+            # print("Got "+str(len(argmax_positives))+" and "+str(len(argmax_negatives))+" argmax clauses")
+            argmax_neg_current_index = 0
+            argmax_pos_current_index = 0
 
-            use_random_clauses = np.zeros(shape=num_training_clauses)
-            if proof.get_number_of_negatives() == 0:
-                use_random_clauses = use_random_clauses + 1
-            elif proof.get_number_of_positives() == 0:
-                pos_next = np.zeros(shape=num_training_clauses)
-                use_random_clauses = use_random_clauses + 1
-            elif proof.get_number_of_negatives() < (num_training_clauses - number_of_positive_clauses):
-                use_random_clauses[(num_training_clauses - number_of_positive_clauses):] = 1
-            else:
-                prob_rand = 1.0/64.0
-                use_random_clauses = np.random.choice(a=[0, 1], size=num_training_clauses, p=[1-prob_rand, prob_rand])
+            # use_random_clauses = np.zeros(shape=num_training_clauses)
+            # if proof.get_number_of_negatives() == 0:
+            #     use_random_clauses = use_random_clauses + 1
+            # elif proof.get_number_of_positives() == 0:
+            #     pos_next = np.zeros(shape=num_training_clauses)
+            #     use_random_clauses = use_random_clauses + 1
+            # elif proof.get_number_of_negatives() < (num_training_clauses - number_of_positive_clauses):
+            #     use_random_clauses[(num_training_clauses - number_of_positive_clauses):] = 1
+            # else:
+            #     prob_rand = 1.0/64.0
+            #     use_random_clauses = np.random.choice(a=[0, 1], size=num_training_clauses, p=[1-prob_rand, prob_rand])
 
             for c in range(num_training_clauses):
                 if pos_next[c] == 1:
-                    training_clauses.append(proof.get_positive())
+                    if argmax_pos_current_index < len(argmax_positives):
+                        training_clauses.append(argmax_positives[argmax_pos_current_index])
+                        # print("Add positive argmax clause "+str(argmax_positives[argmax_pos_current_index]))
+                        argmax_pos_current_index += 1
+                    else:
+                        training_clauses.append(proof.get_positive())
                     labels[p*num_training_clauses+c] = LABEL_POSITIVE
                 else:
-                    if use_random_clauses[c] == 1:
-                        training_clauses.append(self.augmenter.augment_positive_to_negative([], proof.get_vocab()))
+                    # if use_random_clauses[c] == 1:
+                    #     training_clauses.append(self.augmenter.augment_positive_to_negative([], proof.get_vocab()))
                     # elif c % (num_training_clauses / 4) == 0:
                     #     training_clauses.append(self.augmenter.augment_positive_to_negative(proof.get_positive(),
                     #                                                                         proof.get_vocab()))
+                    # else:
+                    if argmax_neg_current_index < len(argmax_negatives):
+                        training_clauses.append(argmax_negatives[argmax_neg_current_index])
+                        argmax_neg_current_index += 1
                     else:
                         training_clauses.append(proof.get_negative())
                     labels[p*num_training_clauses+c] = LABEL_NEGATIVE
