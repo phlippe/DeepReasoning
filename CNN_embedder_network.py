@@ -61,6 +61,7 @@ class CNNEmbedder:
         self.vocab_offset = None
         self.input_clause = None
         self.input_length = None
+        self.input_mask = None
         self.embedded_vector = None
         self.max_fun_code = None
         self.create_lookup_table(reuse_vocab=reuse_vocab)
@@ -73,20 +74,20 @@ class CNNEmbedder:
                                                name="InputClause")
             self.input_length = tf.placeholder(dtype="int32",
                                                shape=[self.batch_size], name="InputClauseLength")
+            self.input_mask = tf.placeholder(dtype="float32",
+                                             shape=[self.batch_size * self.tensor_height, self.char_number],
+                                             name="InputMask")
 
             embedded_vocabs = self.embed_input_clause()
-            if IS_OLD_TENSORFLOW:
-                input_tensor = tf.pack(
-                    values=tf.split(value=embedded_vocabs, num_split=self.batch_size * self.tensor_height, split_dim=0),
-                    axis=0)
-            else:
-                input_tensor = tf.stack(
+            input_tensor = tf.stack(
                     values=tf.split(value=embedded_vocabs, num_or_size_splits=self.batch_size * self.tensor_height,
                                     axis=0),
                     axis=0)
             # TODO: Check which input clause is where after reshaping
             input_tensor = tf.reshape(tensor=input_tensor,
                                       shape=[self.batch_size, self.tensor_height, -1, self.channel_size])
+            input_mask = tf.reshape(tensor=self.input_mask,
+                                    shape=[self.batch_size, self.tensor_height, -1, 1])
 
             if self.net_type == NetType.STANDARD:
                 print("Build up standard network...")
@@ -116,15 +117,18 @@ class CNNEmbedder:
             elif self.net_type == NetType.DILATED_DENSE_BLOCK:
                 print("Build up dilated dense block...")
                 input_tensor = dropout(input_tensor, 0.1, self.is_training)
+                input_tensor = input_tensor * input_mask
                 dense_layer = dilated_dense_block(input_tensor=input_tensor, layer_number=5,
                                                   channel_size=self.embedding_size, end_channels=2*self.embedding_size,
                                                   kernel_size=3, training=self.is_training,
-                                                  dropout_rate=self.dropout_rate)
+                                                  dropout_rate=self.dropout_rate, input_mask=input_mask)
 
                 # final 3x1 convolution without stride to support higher complexity for small clauses
+                dense_layer = dense_layer * input_mask
                 final_layer = conv1d(input_=dense_layer, output_dim=2*self.embedding_size, kernel_size=3,
                                      name="FinalLocalConv", relu=False, use_batch_norm=self.use_batch_norm,
                                      reuse=self.reuse_weights)
+                final_layer = final_layer * input_mask - 5 * (1 - input_mask)    # Mask out neutral symbols
                 tf.summary.scalar(name="FinalLayer_Mean", tensor=tf.reduce_mean(final_layer))
                 tf.summary.scalar(name="FinalLayer_Max", tensor=tf.reduce_max(final_layer))
                 tf.summary.scalar(name="FinalLayer_Min", tensor=tf.reduce_min(final_layer))

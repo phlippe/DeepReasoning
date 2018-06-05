@@ -10,6 +10,7 @@ import os
 from CNN_embedder_network import CNNEmbedder
 
 from data_augmenter import DataAugmenter, DefaultAugmenter
+from multiprocessing import Pool
 from TPTP_train_val_files import *
 if sys.version_info[0] < 3:
     print(" [!] ERROR: Could not import module thread. Python version "+str(sys.version_info))
@@ -356,38 +357,52 @@ class ClauseLoader:
         self.permute_negatives()
 
     @staticmethod
+    def add_single_file_to_proof_loader(proof_file):
+        print(proof_file)
+        new_proof_loader = ProofExampleLoader(proof_file, use_conversion=False)
+        if len(
+                new_proof_loader.get_negated_conjecture()) == 0 or new_proof_loader.get_number_of_negatives() == 0 or new_proof_loader.get_number_of_positives() == 0:
+            print("Could not use this proof loader, no negatives and positives or no conjecture...")
+            # problems[0] = problems[0] + 1
+            return None
+        elif len(new_proof_loader.get_negated_conjecture()) > 150:
+            print("Too large negated conjecture. Will not be used...")
+            # problems[1] = problems[1] + 1
+            return None
+        elif new_proof_loader.get_number_init_clauses() == 0:
+            print("No init clauses provided...")
+            # problems[2] = problems[2] + 1
+            return None
+        elif new_proof_loader.get_number_init_clauses() > 150:
+            print("Too many init clauses...")
+            # problems[3] = problems[3] + 1
+            return None
+        elif new_proof_loader.get_number_of_positives() > 150:
+            print("Too many positive clauses...")
+            # problems[4] = problems[4] + 1
+            return None
+        # elif new_proof_loader.get_number_of_negatives() < 10:
+        #     print("Less than 10 negative clauses. Might be too easy...")
+        #     easy_problems = easy_problems + 1
+        #     print("Easy problems: "+str(easy_problems))
+        else:
+            print("Add proof loader to data loader")
+            # proof_loader.append(new_proof_loader)
+            return new_proof_loader
+            # if new_proof_loader.get_number_init_clauses() > 32:
+            #    large_inits += 1
+
+    @staticmethod
     def initialize_proof_loader(file_list, use_conversion=False):
         problems = [0, 0, 0, 0, 0]
         large_inits = 0
         easy_problems = 0
         proof_loader = []
-        for proof_file in file_list:
-            print(proof_file)
-            new_proof_loader = ProofExampleLoader(proof_file, use_conversion=use_conversion)
-            if len(new_proof_loader.get_negated_conjecture()) == 0 or new_proof_loader.get_number_of_negatives() == 0 or new_proof_loader.get_number_of_positives() == 0:
-                print("Could not use this proof loader, no negatives and positives or no conjecture...")
-                problems[0] = problems[0] + 1
-            elif len(new_proof_loader.get_negated_conjecture()) > 150:
-                print("Too large negated conjecture. Will not be used...")
-                problems[1] = problems[1] + 1
-            elif new_proof_loader.get_number_init_clauses() == 0:
-                print("No init clauses provided...")
-                problems[2] = problems[2] + 1
-            elif new_proof_loader.get_number_init_clauses() > 150:
-                print("Too many init clauses...")
-                problems[3] = problems[3] + 1
-            elif new_proof_loader.get_number_of_positives() > 150:
-                print("Too many positive clauses...")
-                problems[4] = problems[4] + 1
-            # elif new_proof_loader.get_number_of_negatives() < 10:
-            #     print("Less than 10 negative clauses. Might be too easy...")
-            #     easy_problems = easy_problems + 1
-            #     print("Easy problems: "+str(easy_problems))
-            else:
-                print("Add proof loader to data loader")
-                proof_loader.append(new_proof_loader)
-                if new_proof_loader.get_number_init_clauses() > 32:
-                    large_inits += 1
+        # for proof_file in file_list:
+
+        with Pool() as p:
+            proof_loader = p.map(ClauseLoader.add_single_file_to_proof_loader, file_list)
+        proof_loader = [loader for loader in proof_loader if loader is not None]
 
         print("="*50)
         print("Overall proof loader: "+str(len(proof_loader))+" | "+str(len(file_list)))

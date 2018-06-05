@@ -7,7 +7,7 @@ from tensorflow.python.tools import inspect_checkpoint as chkp
 
 
 IS_OLD_TENSORFLOW = (tf.__version__[0] == '0')
-WEIGHT_DECAY_FACTOR = tf.constant(2e-7, name="WeightDecayFactor")
+WEIGHT_DECAY_FACTOR = tf.constant(2e-6, name="WeightDecayFactor")
 
 
 def get_vocab_variable(name, shape, scale_factor=1e-3):
@@ -227,7 +227,7 @@ def hierarchical_wavenet_block(input_tensor, block_number, layer_number, kernel_
 
 
 def dilated_dense_block(input_tensor, layer_number, kernel_size=3, channel_size=-1, end_channels=-1, reuse=False,
-                        dropout_rate=0.5, training=False, name="DilatedDenseBlock"):
+                        dropout_rate=0.5, training=False, name="DilatedDenseBlock", input_mask=None):
     if channel_size <= 0:
         channel_size = input_tensor.get_shape().as_list()[-1]
     if end_channels <= 0:
@@ -244,12 +244,17 @@ def dilated_dense_block(input_tensor, layer_number, kernel_size=3, channel_size=
                                   name="RELU_"+str(layer_index)
                             )
                 layer_out = dropout(layer_out, dropout_rate, training)
+                if input_mask is not None:
+                    layer_out = layer_out * input_mask
             all_layers.append(layer_out)
             with tf.name_scope("FeatureReduction_"+str(layer_index)):
-                output_tensor = tf.nn.relu(conv1d(input_=tf.concat(values=all_layers, axis=3, name="FeatureConcat"+str(layer_index)), kernel_size=1,
+                feature_concat = tf.concat(values=all_layers, axis=3, name="FeatureConcat" + str(layer_index))
+                output_tensor = tf.nn.relu(conv1d(input_=feature_concat, kernel_size=1,
                                                   output_dim=channel_size if layer_index + 1 < layer_number else end_channels,
                                                   name="FeatureReduction_"+str(layer_index), reuse=reuse), name="RELU_"+str(layer_index))
                 output_tensor = dropout(output_tensor, dropout_rate, training)
+                if input_mask is not None:
+                    output_tensor = output_tensor * input_mask
     return output_tensor
 
 
