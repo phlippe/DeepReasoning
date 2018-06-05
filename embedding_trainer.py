@@ -164,7 +164,7 @@ class EmbeddingTrainer:
                         "Iters: [%5d|%5d], time: %4.4f, clause size: %2d|%2d, loss: %.5f, loss ones:%.5f, "
                         "loss zeros:%.5f, loss regularization:%.5f" % (
                             training_step, self.training_iter, time.time() - start_time, np.max(batch[1]),
-                            np.max(batch[3]), loss, loss_ones, loss_zeros, loss_regularization
+                            np.max(batch[3]), loss, loss_ones*1.5, loss_zeros*0.5, loss_regularization
                         )
                 )
                 self.model_trainer.process_specific_loss_information(all_losses)

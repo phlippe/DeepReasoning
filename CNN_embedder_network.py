@@ -115,6 +115,7 @@ class CNNEmbedder:
                                                          name=self.name + "_Wavenet_Block")
             elif self.net_type == NetType.DILATED_DENSE_BLOCK:
                 print("Build up dilated dense block...")
+                input_tensor = dropout(input_tensor, 0.1, self.is_training)
                 dense_layer = dilated_dense_block(input_tensor=input_tensor, layer_number=5,
                                                   channel_size=self.embedding_size, end_channels=2*self.embedding_size,
                                                   kernel_size=3, training=self.is_training,

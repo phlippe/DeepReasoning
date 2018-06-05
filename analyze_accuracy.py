@@ -9,8 +9,8 @@ def main(test_files):
     best_acc_neg = 0
     best_file = "None"
     for file in test_files:
-        if not int(file.split("_")[-1].split(".")[0]) % 2000 == 0:
-            continue
+        # if not int(file.split("_")[-1].split(".")[0]) % 2000 == 0:
+        #     continue
         print("="*40)
         print(file)
         print("="*40)
@@ -30,16 +30,20 @@ def main(test_files):
         loc_mean_acc_pos = 0.0
         loc_mean_acc_neg = 0.0
         loc_margin = 0.0
+        num_pos = 0
+        num_neg = 0
         for mfactor in range(50, 51):
             margin = mfactor / 100.0
             acc_pos_list = list()
             acc_neg_list = list()
             for key, value in results.iteritems():
+                num_pos = num_pos + len(value[0])
+                num_neg = num_neg + len(value[1])
                 acc_pos = len([v for v in value[0] if v <= margin]) * 100.0 / len(value[0])
                 acc_neg = len([v for v in value[1] if v >= margin]) * 100.0 / len(value[1])
                 acc_pos_list.append(acc_pos)
                 acc_neg_list.append(acc_neg)
-
+            print("Overall positive: "+str(num_pos)+", negative: "+str(num_neg))
             all_positives = [item for sublist in [value[0] for key, value in results.iteritems()] for item in sublist]
             all_negatives = [item for sublist in [value[1] for key, value in results.iteritems()] for item in sublist]
             mean_acc_pos = np.mean(np.array(acc_pos_list)) # len([v for v in all_positives if v <= margin]) * 100.0 / len(all_positives)
@@ -71,4 +75,4 @@ def main(test_files):
 
 
 if __name__ == '__main__':
-    main(sorted(glob("logs/test/2018_05_21*/test_file_*.txt")))
+    main(sorted(glob("logs/test/2018_05_28*/test_file_*.txt"), key=lambda x: int(x.split("_")[-1].split(".")[0])))

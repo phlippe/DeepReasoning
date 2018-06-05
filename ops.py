@@ -7,7 +7,7 @@ from tensorflow.python.tools import inspect_checkpoint as chkp
 
 
 IS_OLD_TENSORFLOW = (tf.__version__[0] == '0')
-WEIGHT_DECAY_FACTOR = tf.constant(2e-6, name="WeightDecayFactor")
+WEIGHT_DECAY_FACTOR = tf.constant(2e-7, name="WeightDecayFactor")
 
 
 def get_vocab_variable(name, shape, scale_factor=1e-3):
@@ -356,6 +356,15 @@ def freeze_graph(model_folder, output_node_names, sess, file_name="frozen_model.
     with tf.gfile.GFile(output_graph, "wb") as f:
         f.write(output_graph_def.SerializeToString())
     print("%d ops in the final graph." % len(output_graph_def.node))
+
+
+def load_frozen_graph(frozen_graph_filename):
+    with tf.gfile.GFile(frozen_graph_filename, "rb") as f:
+        graph_def = tf.GraphDef()
+        graph_def.ParseFromString(f.read())
+    with tf.Graph().as_default() as graph:
+        tf.import_graph_def(graph_def, name="prefix")
+    return graph
 
 
 def weighted_BCE_loss(predictions, labels, weight0=1, weight1=1):
