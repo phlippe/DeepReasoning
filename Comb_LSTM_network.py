@@ -1,6 +1,8 @@
 from ops import *
 from CNN_embedder_network import CNNEmbedder, NetType
 from random import shuffle
+import math
+import itertools
 
 FC_LAYER_1 = "Comb_ClauseNegConj"
 FC_LAYER_2 = "Comb_InitMemory"
@@ -73,8 +75,9 @@ class CombLSTMNetwork:
 
             layer_comb = self.first_combination_layer(self.train_clauses, neg_conj_vector, reuse=True)
             layer_comb_dropout = dropout(layer_comb, self.dropout_rate_fc, training=self.is_training)
-
+            # self.state_lstm_initial[0] = tf.Print(self.state_lstm_initial[0], [self.state_lstm_initial[0][:, 0]], message="State before: ", summarize=64)
             shaped_state = self.repeat_lstm_states(self.state_lstm_initial)[0]
+            # shaped_state = tf.Print(shaped_state, [shaped_state[:, 0]], message="State after: ", summarize=64)
             shaped_state = tf.nn.tanh(shaped_state, name="StateActivationFct")
             tensor_with_state = tf.concat(values=[layer_comb_dropout, shaped_state], axis=1)
             layer_initial = fully_connected(input_=tensor_with_state, outputs=self.comb_features,
@@ -100,6 +103,15 @@ class CombLSTMNetwork:
                                                  (shaped_state, "FeaturesState")],
                                                 indices=[(self.num_init_clauses, "Positive"),
                                                          (self.num_init_clauses+self.num_train_clauses/2, "Negative")])
+                euclidian_distance = tf.constant(0, dtype=tf.float32)
+                for i in range(self.num_shuffles-1):
+                    euclidian_distance += self.euclidian_distance(shaped_state[i], shaped_state[i+1])
+                    # euclidian_distance = tf.Print(euclidian_distance, [shaped_state[i], shaped_state[i+1]], message="State example: ", summarize=32)
+                euclidian_distance = euclidian_distance / (self.num_shuffles - 1)
+                tf.summary.scalar(name="Euclidian distance", tensor=euclidian_distance)
+
+    def euclidian_distance(self, feature_vector_0, feature_vector_1):
+        return tf.sqrt(tf.reduce_sum(tf.square(feature_vector_0 - feature_vector_1)))
 
     def add_feature_visualizations(self, feature_tensor_tuples, scale_size=32, indices=None):
         if indices is None:
@@ -124,8 +136,8 @@ class CombLSTMNetwork:
         print("Repeat factor: " + str(rep_factor))
         print("Hidden states: " + str(state[0].get_shape().as_list()))
         print("Current states: " + str(state[1].get_shape().as_list()))
-        repeated_hidden_states = CombLSTMNetwork.repeat_tensor(tensor_to_repeat=state[0], axis=0, times=rep_factor)
-        repeated_current_states = CombLSTMNetwork.repeat_tensor(tensor_to_repeat=state[1], axis=0, times=rep_factor)
+        repeated_hidden_states = self.repeat_initial_state(state[0]) # CombLSTMNetwork.repeat_tensor(tensor_to_repeat=state[0], axis=0, times=rep_factor)
+        repeated_current_states = self.repeat_initial_state(state[1]) # CombLSTMNetwork.repeat_tensor(tensor_to_repeat=state[1], axis=0, times=rep_factor)
         print("Repeated hidden states: " + str(repeated_hidden_states.get_shape().as_list()))
         print("Repeated current states: " + str(repeated_current_states.get_shape().as_list()))
         return [repeated_hidden_states, repeated_current_states]
@@ -154,14 +166,14 @@ class CombLSTMNetwork:
                 neg_conj_vector = self.repeat_tensor(tensor_to_repeat=self.neg_conj_embedded,
                                                      times=self.num_init_clauses,
                                                      axis=0)
+                # neg_conj_vector = tf.Print(neg_conj_vector, [self.init_clauses_length], message="Init Length: ", summarize=6)
                 comb_layer = self.first_combination_layer(self.init_clauses, neg_conj_vector, reuse=False)
 
             with tf.name_scope("ShuffleInitClauses"):
                 # Split clauses belonging to different proofs/negated conjectures
                 splitted_init_clauses = tf.split(value=comb_layer, num_or_size_splits=self.num_proof, axis=0)
                 # Create randomly shuffled index matrices for all init clause lengths
-                shuffle_list = [CombLSTMNetwork.create_shuffle_tensor(self.num_init_clauses) for _ in
-                                range(self.num_shuffles)]
+                shuffle_list = CombLSTMNetwork.create_shuffle_tensor(self.num_init_clauses, self.num_shuffles)
                 shuffle_tensor = tf.constant(value=shuffle_list, dtype="int32")
                 # Randomly shuffle init clauses. For better generalization do it "self.num_shuffles" times differently.
                 """
@@ -284,14 +296,39 @@ class CombLSTMNetwork:
         # Squeeze so that LSTMs can run with fully connected layers
         self.neg_conj_embedded = tf.squeeze(self.neg_conjecture_embedder.embedded_vector)
 
+    # [a b c d] to [a b a b c d c d]
+    def repeat_initial_state(self, input_tensor):
+        input_tensor = tf.reshape(input_tensor, [self.num_proof, self.num_shuffles, -1])
+        input_tensor = tf.tile(input_tensor, multiples=[1, int(self.num_train_clauses / self.num_shuffles), 1])
+        input_tensor = tf.reshape(input_tensor, [int(self.num_proof * self.num_train_clauses), -1])
+        return input_tensor
+
     @staticmethod
-    def create_shuffle_tensor(num_init_clauses):
-        shuffle_matrix = [list(range(num_init_clauses)) for _ in range(num_init_clauses)]
-        for i in range(num_init_clauses):
-            a = shuffle_matrix[i][:i + 1]
-            shuffle(a)
-            shuffle_matrix[i][:i + 1] = a
-        return shuffle_matrix
+    def create_shuffle_tensor(num_init_clauses, num_shuffles):
+        all_shuffles = list()
+        min_fact = -1
+        for shuff_index in range(num_shuffles):
+            shuffle_matrix = [list(range(num_init_clauses)) for _ in range(num_init_clauses)]
+            for i in range(num_init_clauses):
+                a = shuffle_matrix[i][:i + 1]
+                if math.factorial(i+1) <= num_shuffles:
+                    permuts = list(itertools.permutations(range(0,i+1)))
+                    a = permuts[shuff_index % len(permuts)]
+                else:
+                    if min_fact == -1:
+                        min_fact = i
+                    for _ in range(100):
+                        shuffle(a)
+                        already_exists = False
+                        for j in range(shuff_index):
+                            diff_list = [k for k in range(i+1) if a[k] != all_shuffles[j][i][k]]
+                            # print(str(a) + " vs " + str(all_shuffles[j][i][:i+1]) + " -> " + str(diff_list))
+                            already_exists = already_exists or (len(diff_list) < (i - min_fact + 1))
+                        if not already_exists:
+                            break
+                shuffle_matrix[i][:i + 1] = a
+            all_shuffles.append(shuffle_matrix)
+        return all_shuffles
 
     # Convert [a b c d] to [a a b b c c d d]
     @staticmethod
@@ -344,9 +381,14 @@ def test_extract_states():
 
 
 def test_shuffle_tensor():
-    num_init_clauses = 32
-    shuffle_matrix = CombLSTMNetwork.create_shuffle_tensor(num_init_clauses)
-    print(shuffle_matrix)
+    num_init_clauses = 8
+    num_shuffles = 8
+    shuffle_matrix = CombLSTMNetwork.create_shuffle_tensor(num_init_clauses, num_shuffles)
+    for i in range(num_init_clauses):
+        print("[")
+        for j in range(num_shuffles):
+            print(shuffle_matrix[j][i])
+        print("]")
 
 
 def visualize_graph():

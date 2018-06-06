@@ -125,14 +125,21 @@ class TestClauseLoader:
             if max(batch_neg_conj_length) > self.max_neg_conj_len:
                 neg_conj_batch = neg_conj_batch[:, :self.max_neg_conj_len]
                 batch_neg_conj_length = np.minimum(batch_neg_conj_length, self.max_neg_conj_len)
-            processed_batches.append([clause_batch, batch_clause_length, neg_conj_batch, batch_neg_conj_length,
+            clause_input_mask = np.ones_like(clause_batch, dtype=np.float32) * \
+                                np.expand_dims(np.arange(clause_batch.shape[1]), axis=0)
+            clause_input_mask = 1.0 * np.greater_equal(np.expand_dims(batch_clause_length, axis=1), clause_input_mask)
+            neg_conj_input_mask = np.ones_like(neg_conj_batch, dtype=np.float32) * \
+                                np.expand_dims(np.arange(neg_conj_batch.shape[1]), axis=0)
+            neg_conj_input_mask = 1.0 * np.greater_equal(np.expand_dims(batch_neg_conj_length, axis=1), neg_conj_input_mask)
+            processed_batches.append([clause_batch, batch_clause_length, clause_input_mask,
+                                      neg_conj_batch, batch_neg_conj_length, neg_conj_input_mask,
                                       init_clause_lengths, labels, proofs_chosen])
         return processed_batches
 
     def print_out_results(self, batches, results):
         s = ""
         for index in range(len(batches)):
-            clause_batch, _, _, _, _, labels, proofs_chosen = batches[index]
+            clause_batch, _, _, _, _, _, _, labels, proofs_chosen = batches[index]
             training_clauses = clause_batch[:int(clause_batch.shape[0] / 2)]
             for proof in range(len(proofs_chosen)):
                 proof_index = proofs_chosen[proof]
