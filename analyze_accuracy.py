@@ -71,8 +71,9 @@ def main(test_files):
     print("Best file: "+best_file)
     print("Accuracy positive: "+str(best_acc_pos))
     print("Accuracy negative: "+str(best_acc_neg))
+    print("Overall accuracy: "+str((best_acc_neg + best_acc_pos)/2))
 
 
 
 if __name__ == '__main__':
-    main(sorted(glob("logs/test/2018_05_28*/test_file_*.txt"), key=lambda x: int(x.split("_")[-1].split(".")[0])))
+    main(sorted(glob("logs/test/2018_06_10*/test_file_*.txt"), key=lambda x: int(x.split("_")[-1].split(".")[0])))

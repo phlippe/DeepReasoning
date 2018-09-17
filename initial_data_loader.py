@@ -100,12 +100,17 @@ class InitialClauseLoader:
             proof.new_batch()
             proof.shuffle_conversion()
             proofs_chosen.append(proof_ind)
+
+            augm_dict = self.augmenter.create_vocab_augmentation_dict(proof.get_vocab())
             # Prepare initial clauses
             ic = proof.get_init_clauses(num_init_clauses)
+            ic = self.augmenter.augment_vocab(ic, augm_dict)
             initial_clauses.append(ic)
             init_clause_lengths[p] = min(proof.get_number_init_clauses(), num_init_clauses)
             # One negated conjecture per proof
-            batch_neg_conj.append(proof.get_negated_conjecture())
+            neg_conj = proof.get_negated_conjecture()
+            neg_conj = self.augmenter.augment_vocab(neg_conj, augm_dict)
+            batch_neg_conj.append(neg_conj)
 
             # pos_next = np.random.choice(a=[0, 1], size=num_training_clauses, p=[1 - self.prob_pos, self.prob_pos])
             # No randomness, because it does not help the network and the loss function is optimized for exactly
@@ -131,15 +136,15 @@ class InitialClauseLoader:
             # else:
             #     prob_rand = 1.0/64.0
             #     use_random_clauses = np.random.choice(a=[0, 1], size=num_training_clauses, p=[1-prob_rand, prob_rand])
-
+            proof_clauses = list()
             for c in range(num_training_clauses):
                 if pos_next[c] == 1:
                     if argmax_pos_current_index < len(argmax_positives):
-                        training_clauses.append(argmax_positives[argmax_pos_current_index])
+                        proof_clauses.append(argmax_positives[argmax_pos_current_index])
                         # print("Add positive argmax clause "+str(argmax_positives[argmax_pos_current_index]))
                         argmax_pos_current_index += 1
                     else:
-                        training_clauses.append(proof.get_positive())
+                        proof_clauses.append(proof.get_positive())
                     labels[p*num_training_clauses+c] = LABEL_POSITIVE
                 else:
                     # if use_random_clauses[c] == 1:
@@ -149,34 +154,44 @@ class InitialClauseLoader:
                     #                                                                         proof.get_vocab()))
                     # else:
                     if argmax_neg_current_index < len(argmax_negatives):
-                        training_clauses.append(argmax_negatives[argmax_neg_current_index])
+                        proof_clauses.append(argmax_negatives[argmax_neg_current_index])
                         argmax_neg_current_index += 1
                     else:
-                        training_clauses.append(proof.get_negative())
+                        proof_clauses.append(proof.get_negative())
                     labels[p*num_training_clauses+c] = LABEL_NEGATIVE
+            proof_clauses = self.augmenter.augment_vocab(proof_clauses, augm_dict)
+            training_clauses += proof_clauses
         # Augment all clauses
         initial_clauses = [self.augmenter.augment_clause(clause) for sublist in initial_clauses for clause in sublist]
         training_clauses = [self.augmenter.augment_clause(clause) for clause in training_clauses]
         batch_neg_conj = [self.augmenter.augment_clause(clause) for clause in batch_neg_conj]
         batch_clauses = training_clauses + initial_clauses
+        batch_neg_conj_syntax = [self.augmenter.get_additional_arguments(clause) for clause in batch_neg_conj]
+        batch_clauses_syntax = [self.augmenter.get_additional_arguments(clause) for clause in batch_clauses]
 
         batch_clause_length = get_clause_lengths(batch_clauses)
         batch_neg_conj_length = get_clause_lengths(batch_neg_conj)
         max_batch_clause_length = max(batch_clause_length)
         max_batch_neg_conj_length = max(batch_neg_conj_length)
         clause_batch = np.zeros(shape=[batch_size, max_batch_clause_length], dtype=np.int32) + self.empty_char
+        clause_batch_syntax = np.zeros(shape=[batch_size, max_batch_clause_length, batch_clauses_syntax[0].shape[1]], dtype=np.float32)
         neg_conj_batch = np.zeros(shape=[num_proofs, max_batch_neg_conj_length], dtype=np.int32) + self.empty_char
+        neg_conj_syntax = np.zeros(shape=[num_proofs, max_batch_neg_conj_length, batch_neg_conj_syntax[0].shape[1]], dtype=np.float32)
         batch_clause_length = np.array(batch_clause_length)
         batch_neg_conj_length = np.array(batch_neg_conj_length)
         for b in range(batch_size):
             clause_batch[b, :batch_clause_length[b]] = np.array(batch_clauses[b])
+            clause_batch_syntax[b, :batch_clause_length[b], :] = batch_clauses_syntax[b]
         for b in range(num_proofs):
             neg_conj_batch[b, :batch_neg_conj_length[b]] = np.array(batch_neg_conj[b])
+            neg_conj_syntax[b, :batch_neg_conj_length[b], :] = batch_neg_conj_syntax[b]
         if max_batch_clause_length > self.max_clause_len:
             clause_batch = clause_batch[:, :self.max_clause_len]
+            clause_batch_syntax = clause_batch_syntax[:, :self.max_clause_len, :]
             batch_clause_length = np.minimum(batch_clause_length, self.max_clause_len)
         if max_batch_neg_conj_length > self.max_neg_conj_len:
             neg_conj_batch = neg_conj_batch[:, :self.max_neg_conj_len]
+            neg_conj_syntax = neg_conj_syntax[:, :self.max_neg_conj_len, :]
             batch_neg_conj_length = np.minimum(batch_neg_conj_length, self.max_neg_conj_len)
         clause_input_mask = np.ones_like(clause_batch, dtype=np.float32) * \
                             np.expand_dims(np.arange(clause_batch.shape[1]), axis=0)
@@ -186,8 +201,8 @@ class InitialClauseLoader:
         neg_conj_input_mask = 1.0 * np.greater_equal(np.expand_dims(batch_neg_conj_length, axis=1), neg_conj_input_mask)
         # print(clause_input_mask)
 
-        self.global_batch = [clause_batch, batch_clause_length, clause_input_mask,
-                             neg_conj_batch, batch_neg_conj_length, neg_conj_input_mask,
+        self.global_batch = [clause_batch, batch_clause_length, clause_input_mask, clause_batch_syntax,
+                             neg_conj_batch, batch_neg_conj_length, neg_conj_input_mask, neg_conj_syntax,
                              init_clause_lengths, labels, proofs_chosen]
 
     def print_statistic(self):

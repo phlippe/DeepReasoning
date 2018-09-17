@@ -13,7 +13,7 @@ class CombLSTMNetwork:
     def __init__(self, embedding_size=1024, num_init_clauses=32, num_proof=4, num_train_clauses=32, num_shuffles=4,
                  weight0=1, weight1=1, name="CombLSTMNet", wavenet_blocks=1, wavenet_layers=2, comb_features=1024,
                  embedding_net_type=NetType.STANDARD, dropout_rate_embedder=0.2, dropout_rate_fc=0.0,
-                 use_conversion=False):
+                 use_conversion=False, dropout_rate_neg_conj=0.125):
 
         assert embedding_size > 0, "Number of channels for first layer has to be greater than 0!"
 
@@ -33,6 +33,7 @@ class CombLSTMNetwork:
         self.embedding_net_type = embedding_net_type
         self.dropout_rate_embedder = dropout_rate_embedder
         self.dropout_rate_fc = dropout_rate_fc
+        self.dropout_rate_neg_conj = dropout_rate_neg_conj
         self.use_conversion = use_conversion
 
         self.labels = None
@@ -42,6 +43,7 @@ class CombLSTMNetwork:
         self.loss_ones = None
         self.loss_zeros = None
         self.loss_regularization = None
+        self.loss_euclidian = None
         self.all_losses = None
         self.init_clauses = None
         self.train_clauses = None
@@ -72,6 +74,16 @@ class CombLSTMNetwork:
 
             neg_conj_vector = self.repeat_tensor(tensor_to_repeat=self.neg_conj_embedded, axis=0,
                                                  times=self.num_train_clauses)
+            # =======================
+            # === NEGCONJ DROPOUT ===
+            # =======================
+            # neg_conj_dropout_probs = tf.random_uniform(shape=[tf.shape(neg_conj_vector)[0], 1], minval=0.0, maxval=1.0, name="NegConjDropoutProbs")
+            # neg_conj_dropout_mask = tf.cast(tf.less_equal(neg_conj_dropout_probs, self.dropout_rate_neg_conj), dtype=tf.float32) * tf.cast(self.is_training, dtype=tf.float32)
+            # neg_conj_dropout_mask = tf.Print(neg_conj_dropout_mask, [neg_conj_dropout_mask], message="Dropout mask: ", summarize=16)
+            # neg_conj_vector = neg_conj_vector * (1 - neg_conj_dropout_mask)
+            # neg_conj_vector = tf.Print(neg_conj_vector, [neg_conj_vector[:,0], self.train_clauses[:,0]], summarize=16, message="Applying dropout: ")
+            # self.train_clauses = self.train_clauses * (1 + neg_conj_dropout_mask) # Scale up by 2 if neg conj is dropped
+            # neg_conj_vector = tf.Print(neg_conj_vector, [self.train_clauses[:,0]], summarize=16, message="Scaling: ")
 
             layer_comb = self.first_combination_layer(self.train_clauses, neg_conj_vector, reuse=True)
             layer_comb_dropout = dropout(layer_comb, self.dropout_rate_fc, training=self.is_training)
@@ -93,7 +105,9 @@ class CombLSTMNetwork:
             self.loss, self.loss_ones, self.loss_zeros, self.all_losses = weighted_BCE_loss(self.weight, self.labels,
                                                                                             self.weight0, self.weight1)
             self.loss_regularization = weight_decay_loss()
+            self.loss_euclidian = self.state_euclidian_loss(self.state_lstm_initial[0]) * 0.01
             self.loss += self.loss_regularization
+            self.loss += self.loss_euclidian
 
             with tf.name_scope("SummaryVisu"):
                 self.add_feature_visualizations([(self.neg_conj_embedded[0, :], "FeatureNegConj")])
@@ -103,12 +117,17 @@ class CombLSTMNetwork:
                                                  (shaped_state, "FeaturesState")],
                                                 indices=[(self.num_init_clauses, "Positive"),
                                                          (self.num_init_clauses+self.num_train_clauses/2, "Negative")])
-                euclidian_distance = tf.constant(0, dtype=tf.float32)
-                for i in range(self.num_shuffles-1):
-                    euclidian_distance += self.euclidian_distance(shaped_state[i], shaped_state[i+1])
-                    # euclidian_distance = tf.Print(euclidian_distance, [shaped_state[i], shaped_state[i+1]], message="State example: ", summarize=32)
-                euclidian_distance = euclidian_distance / (self.num_shuffles - 1)
-                tf.summary.scalar(name="Euclidian distance", tensor=euclidian_distance)
+
+    def state_euclidian_loss(self, states):
+        states_per_proof = tf.split(states, num_or_size_splits=self.num_proof)
+        rolled_states = list()
+        for proof_index in range(self.num_proof):
+            rolled_states.append(tf.concat([states_per_proof[proof_index][1:], states_per_proof[proof_index][0:1]], axis=0))
+        rolled_states_tensor = tf.concat(rolled_states, axis=0)
+        euclidian_distance = self.euclidian_distance(rolled_states_tensor, states)
+        # euclidian_distance = tf.Print(euclidian_distance, [states[:, 0], rolled_states_tensor[:, 0]], message="Rolled tensor: ", summarize=16)
+        euclidian_distance = euclidian_distance / (self.num_proof + self.num_shuffles)
+        return euclidian_distance
 
     def euclidian_distance(self, feature_vector_0, feature_vector_1):
         return tf.sqrt(tf.reduce_sum(tf.square(feature_vector_0 - feature_vector_1)))

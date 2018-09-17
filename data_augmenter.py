@@ -18,6 +18,15 @@ class DefaultAugmenter:
     def augment_positive_to_negative(self, clause, proof_vocab):
         return clause
 
+    def get_additional_arguments(self, clause):
+        return None
+
+    def create_vocab_augmentation_dict(self, proof_vocab):
+        return None
+
+    def augment_vocab(self, clauses, augm_dict):
+        return clauses
+
 
 class DataAugmenter:
 
@@ -25,6 +34,7 @@ class DataAugmenter:
         self.use_conversion = use_conversion
         self.vocab = self.load_vocab()
         self.reversed_vocab = {v: k for k, v in self.vocab.items()}
+        self.arity_vocab = {k: CNNEmbedder.get_arity_from_vocab(v) for k, v in self.reversed_vocab.items()}
         self.vocab_by_arity = self.sort_vocab(self.vocab)
         self.arity_distribution = [len(self.vocab_by_arity[i]) for i in range(len(self.vocab_by_arity)) if i > 0]
         self.arity_distribution = [x * 1.0 / sum(self.arity_distribution) for x in self.arity_distribution]
@@ -83,6 +93,33 @@ class DataAugmenter:
     def random_variables(self):
         permute_indices = np.random.permutation(len(self.variables))
         return [self.variables[i] for i in permute_indices]
+
+    def create_vocab_augmentation_dict(self, proof_vocab):
+        vocab_augmentation = np.random.choice(a=[0, 1, 2], p=[0.9, 0.1, 0.0]) # 0.3, 0.4, 0.3
+        conv_vocab = dict()
+        for voc in proof_vocab:
+            new_voc = voc
+            voc_arity = self.arity_vocab[voc]
+            if vocab_augmentation != 0 and voc_arity >= 0:
+                augment_voc = np.random.choice(a=[True, False], p=[0.2, 0.8]) or (vocab_augmentation == 2)
+                if augment_voc:
+                    new_voc = self._augment_random_vocab(voc)
+            conv_vocab[voc] = new_voc
+        return conv_vocab
+
+    def augment_vocab(self, clauses, augm_dict):
+        for i in range(len(clauses)):
+            if isinstance(clauses[i], list):
+                clauses[i] = [augm_dict[c] if (c in augm_dict) else c for c in clauses[i]]
+            else:
+                clauses[i] = augm_dict[clauses[i]] if clauses[i] in augm_dict else clauses[i]
+        return clauses
+
+    def _augment_random_vocab(self, voc):
+        voc_arity = self.arity_vocab[voc]
+        rand_index = np.random.randint(len(self.vocab_by_arity[voc_arity]))
+        new_voc = self.vocab[self.vocab_by_arity[voc_arity][rand_index]]
+        return new_voc
 
     def augment_positive_to_negative(self, clause, proof_vocab):
         clause = self.add_random_literals(clause, proof_vocab)
@@ -156,13 +193,99 @@ class DataAugmenter:
         return lit
 
     def get_additional_arguments(self, clause):
-        #self.get_clause_layers()
-        number_of_literals = 5
-        literal_length = 2
-        literal_length_activation = math.tanh(3 * (literal_length - number_of_literals / clause) / (literal_length + number_of_literals / clause))
+        arities = [self.arity_vocab[c]+2 for c in clause]
+        clause_layers = self.get_clause_layers(clause)
+        literal_ids, literal_length_activation, positions, pos_neg_literal = self.get_literal_inputs(clause)
         clause_length_activation = math.tanh(3 * (len(clause)-30) / (len(clause)+30))
-        return list()
+        clause_len_input = [clause_length_activation for _ in range(len(clause))]
+        np_arities = DataAugmenter.convert_to_one_hot(arities, max_val=7, periodic=False)
+        np_clause_layers = DataAugmenter.convert_to_one_hot(clause_layers, max_val=5, periodic=False)
+        np_clause_len = np.array(clause_len_input, dtype=np.float32)
+        np_literal_ids = DataAugmenter.convert_to_one_hot(literal_ids, max_val=3, periodic=True)
+        np_pos_neg_literal = np.array(pos_neg_literal, dtype=np.float32)
+        np_literal_length = np.array(literal_length_activation, dtype=np.float32)
+        np_positions = np.array(positions, dtype=np.float32)
+        add_input = np.stack([np_clause_len, np_pos_neg_literal, np_literal_length, np_positions], axis=1)
+        add_input = np.concatenate([np_arities, np_clause_layers, np_literal_ids, add_input], axis=1)
+        return add_input
 
+    @staticmethod
+    def convert_to_one_hot(array, max_val=None, periodic=False):
+        if max_val is None:
+            max_val = max(array)
+        one_hot_vector = np.zeros(shape=[len(array), max_val + 1], dtype=np.float32)
+        for i in range(len(array)):
+            if array[i] < 0:
+                continue
+            index = array[i]
+            if periodic:
+                index = index % max_val
+            else:
+                index = min(index, max_val)
+            one_hot_vector[i][index] = 1
+        return one_hot_vector
+
+    def get_literal_inputs(self, clause):
+        ids = list()
+        lengths = list()
+        positions = list()
+        neg_literals = [-1]
+        current_id = 0
+        last_literal_change = -1
+        for i in range(len(clause)):
+            if clause[i] == self.vocab[","]:
+                current_id += 1
+                lengths.append((i - 1) - last_literal_change)
+                if lengths[-1] == 0:
+                    print("[!] ERROR: Zero length found at "+str(i)+" -> clause "+str(clause))
+                elif lengths[-1] == 1:
+                    positions[last_literal_change+1] = 0
+                else:
+                    positions[last_literal_change+1:] = [2*(p*1.0/(lengths[-1]-1)) - 1 for p in positions[last_literal_change+1:]]
+                last_literal_change = i
+                ids.append(-1)
+                positions.append(0)
+                neg_literals.append(-1)
+            else:
+                ids.append(current_id)
+                positions.append((i - 1) - last_literal_change)
+                if clause[i] == self.vocab["~"]:
+                    neg_literals[-1] = 1
+        lengths.append((len(clause) - 1) - last_literal_change)
+        if lengths[-1] == 0:
+            print("[!] ERROR: Zero length found at " + str(i) + " -> clause " + str(clause))
+        elif lengths[-1] == 1:
+            positions[last_literal_change+1] = 0
+        else:
+            positions[last_literal_change+1:] = [2*(p*1.0/(lengths[-1]-1)) - 1 for p in positions[last_literal_change+1:]]
+
+        number_of_literals = current_id + 1
+        clause_length = len(clause) - (number_of_literals - 1)  # Abziehen der ","
+        length_activations = [math.tanh(3.0 * (l * 1.0 / clause_length - 1.0 / number_of_literals) / (l * 1.0 / clause_length + 1.0 / number_of_literals)) for l in lengths]
+        length_input = list()
+        pos_neg_literal = list()
+        for i in range(number_of_literals):
+            length_input += [length_activations[i] for _ in range(lengths[i])]
+            pos_neg_literal += [neg_literals[i] for _ in range(lengths[i])]
+            length_input.append(0)
+            pos_neg_literal.append(0)
+        del length_input[-1]
+        del pos_neg_literal[-1]
+
+        return ids, length_input, positions, pos_neg_literal
+
+    def get_clause_layers(self, clause):
+        layers = list()
+        current_layer = 0
+        for i in range(len(clause)):
+            if clause[i] == self.vocab[")"]:
+                current_layer -= 1
+            layers.append(current_layer)
+            if clause[i] == self.vocab["("]:
+                current_layer += 1
+        if current_layer != 0:
+            print("[!] WARNING: Clause did not end on layer 0 but "+str(current_layer) + " -> clause: " + str(clause))
+        return layers
 
     @staticmethod
     def split_list(iterable, splitters):
@@ -182,7 +305,7 @@ class DataAugmenter:
     @staticmethod
     def get_variables(vocab):
         var_list = []
-        for i in range(30):
+        for i in range(25):
             var = "X" + str(i + 1)
             var_list.append(vocab[var])
         return var_list
@@ -191,19 +314,26 @@ class DataAugmenter:
 def test_augmentation():
     vocab = CNNEmbedder.get_vocabulary(use_conversion=False)
     rev_vocab = {v: k for k, v in vocab.items()}
-    clause = ["left_inverse#1", "(", "X1", "X2", ")", ",", "left_zero#2", "(", "X2", "X3", ")", "=", "living#2", "(", "X4", "X1", ")",",","lonely#1","(","X4",")"]
+    clause = ["~", "left_inverse#1", "(", "X1", "X2", ")", ",", "left_zero#2", "(", "lonely#1", "(", "X1", ")", "X3", ")", "=", "living#2", "(", "X4", "X1", ")",",","lonely#1","(","X4",")"]
     clause = [vocab[x] for x in clause]
+    proof_vocab = list(np.unique(np.array(clause)))
     print(clause)
     aug = DataAugmenter()
-    print(aug.vocab_by_arity)
-    for i in range(10):
-        print("Arity = "+str(i)+": "+str(len(aug.vocab_by_arity[i])))
-    print(aug.augment_clause(clause))
-    start_time = time.time()
-    for _ in range(16):
-        aug_clause = aug.augment_positive_to_negative([], np.unique(np.array(clause)))
-    print("Time: " + str((time.time() - start_time) / 16))
-    print([rev_vocab[x] for x in aug_clause])
+    # print(aug.get_clause_layers(clause))
+    # print(aug.get_literal_inputs(clause))
+    # print(aug.get_additional_arguments(clause))
+    augm_dict = aug.create_vocab_augmentation_dict(proof_vocab)
+    print(augm_dict)
+    print(aug.augment_vocab(clause, augm_dict))
+    # print(aug.vocab_by_arity)
+    # for i in range(10):
+    #     print("Arity = "+str(i)+": "+str(len(aug.vocab_by_arity[i])))
+    # print(aug.augment_clause(clause))
+    # start_time = time.time()
+    # for _ in range(16):
+    #     aug_clause = aug.augment_positive_to_negative([], np.unique(np.array(clause)))
+    # print("Time: " + str((time.time() - start_time) / 16))
+    # print([rev_vocab[x] for x in aug_clause])
 
 
 if __name__ == '__main__':

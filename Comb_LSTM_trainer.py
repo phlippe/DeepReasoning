@@ -52,7 +52,8 @@ class CombLSTMTrainer(ModelTrainer):
         return combined_network
 
     def run_model(self, sess, model, fetches, batch, is_training=True, run_options=None, run_metadata=None):
-        input_clause, input_clause_len, input_clause_mask, input_conj, input_conj_len, input_conj_mask, init_clause_len, labels = batch
+        input_clause, input_clause_len, input_clause_mask, input_clause_syntax, input_conj, input_conj_len, input_conj_mask, input_conj_syntax, init_clause_len, labels = batch
+
         feed_dict = {
             model.clause_embedder.input_clause: input_clause,
             model.neg_conjecture_embedder.input_clause: input_conj,
@@ -60,6 +61,8 @@ class CombLSTMTrainer(ModelTrainer):
             model.neg_conjecture_embedder.input_length: input_conj_len,
             model.clause_embedder.input_mask: input_clause_mask,
             model.neg_conjecture_embedder.input_mask: input_conj_mask,
+            model.clause_embedder.input_syntax: input_clause_syntax,
+            model.neg_conjecture_embedder.input_syntax: input_conj_syntax,
             model.init_clauses_length: init_clause_len,
             model.labels: labels,
             model.is_training: is_training

@@ -53,6 +53,7 @@ class CNNEmbedder:
         self.is_training = is_training
         self.max_pool_prop = max_pool_prop
         self.use_conversion = use_conversion
+        self.number_additional_inputs = 22
 
         self.vocab_table = None
         self.arity_table = None
@@ -77,6 +78,10 @@ class CNNEmbedder:
             self.input_mask = tf.placeholder(dtype="float32",
                                              shape=[self.batch_size * self.tensor_height, self.char_number],
                                              name="InputMask")
+            self.input_syntax = tf.placeholder(dtype="float32",
+                                               shape=[self.batch_size * self.tensor_height, self.char_number,
+                                                      self.number_additional_inputs],
+                                               name="InputSyntax")
 
             embedded_vocabs = self.embed_input_clause()
             input_tensor = tf.stack(
@@ -85,7 +90,16 @@ class CNNEmbedder:
                     axis=0)
             # TODO: Check which input clause is where after reshaping
             input_tensor = tf.reshape(tensor=input_tensor,
-                                      shape=[self.batch_size, self.tensor_height, -1, self.channel_size])
+                                      shape=[self.batch_size, self.tensor_height, -1, int(self.channel_size / 2)])
+            input_tensor_add = tf.reshape(tensor=self.input_syntax,
+                                          shape=[self.batch_size, self.tensor_height, -1,
+                                                 self.number_additional_inputs])
+            input_tensor_add = conv1d(input_=2*input_tensor_add, output_dim=int(self.channel_size / 2),
+                                      kernel_size=1, name=self.name+"_InputUpscaling", relu=False,
+                                      use_batch_norm=self.use_batch_norm, reuse=self.reuse_weights)
+            input_tensor_add = tf.nn.tanh(input_tensor_add, name=self.name+"_InputActivation")
+            # input_tensor_add = tf.Print(input_tensor_add, [input_tensor_add], message="Input tensor additional: ", summarize=8)
+            input_tensor = tf.concat([input_tensor, input_tensor_add], axis=-1)
             input_mask = tf.reshape(tensor=self.input_mask,
                                     shape=[self.batch_size, self.tensor_height, -1, 1])
 
@@ -177,10 +191,10 @@ class CNNEmbedder:
     def embed_input_clause(self):
         all_vocabs = tf.reshape(tensor=self.input_clause, shape=[-1])
         vocab_indices = tf.gather(self.vocab_index_tensor, all_vocabs + self.vocab_offset)
-        arity_indices = tf.gather(self.arity_index_tensor, all_vocabs)
+        # arity_indices = tf.gather(self.arity_index_tensor, all_vocabs)
         embedded_vocabs = tf.nn.embedding_lookup(params=self.vocab_table, ids=vocab_indices, name="Vocab_Lookup")
-        embedded_arities = tf.nn.embedding_lookup(params=self.arity_table, ids=arity_indices, name="Arity_Lookup")
-        return tf.concat([embedded_vocabs, embedded_arities], axis=1)
+        # embedded_arities = tf.nn.embedding_lookup(params=self.arity_table, ids=arity_indices, name="Arity_Lookup")
+        return embedded_vocabs # tf.concat([embedded_vocabs, embedded_arities], axis=1)
 
     def get_random_clause(self):
         random_clause = np.random.randint(0, len(list(self.get_vocabulary(use_conversion=self.use_conversion).values())),

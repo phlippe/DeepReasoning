@@ -143,10 +143,11 @@ class EmbeddingTrainer:
                 else:
                     run_options = None
                     run_metadata = None
-                loss, loss_zeros, loss_ones, all_losses, loss_regularization, sum_str, _ = \
+                loss, loss_zeros, loss_ones, all_losses, loss_regularization, loss_states, sum_str, _ = \
                     self.model_trainer.run_model(sess, self.model, [self.model.loss, self.model.loss_zeros,
                                                                     self.model.loss_ones, self.model.all_losses,
                                                                     self.model.loss_regularization,
+                                                                    self.model.loss_euclidian,
                                                                     summary, optimizing], batch, is_training=True,
                                                  run_options=run_options, run_metadata=run_metadata)
 
@@ -162,9 +163,9 @@ class EmbeddingTrainer:
                     train_writer.add_summary(sum_str, training_step)
                 print(
                         "Iters: [%5d|%5d], time: %4.4f, clause size: %2d|%2d, loss: %.5f, loss ones:%.5f, "
-                        "loss zeros:%.5f, loss regularization:%.5f" % (
+                        "loss zeros:%.5f, loss regularization:%.5f, loss states:%.5f" % (
                             training_step, self.training_iter, time.time() - start_time, np.max(batch[1]),
-                            np.max(batch[4]), loss, loss_ones*1.5, loss_zeros*0.5, loss_regularization
+                            np.max(batch[5]), loss, loss_ones*1.5, loss_zeros*0.5, loss_regularization, loss_states
                         )
                 )
                 self.model_trainer.process_specific_loss_information(all_losses)
@@ -208,7 +209,7 @@ class EmbeddingTrainer:
             weights = self.model_trainer.run_model(sess, self.model, [self.model.weight], batch, is_training=False)
             all_weights.append(weights[0])
         s = self.model_trainer.process_test_batches(all_weights)
-        with open(os.path.join(self.test_folder, "test_file_" + str(training_step) + ".txt"), 'w') as f:
+        with open(os.path.join(self.test_folder, "test_file_" + str(training_step).zfill(7) + ".txt"), 'w') as f:
             f.write(s)
         print("Finished testing model")
         print("%" * 125)

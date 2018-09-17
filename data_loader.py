@@ -26,6 +26,7 @@ IS_UNPROCESSED_INDEX = "is_unp"
 EXAMPLE_INDEX = "index"
 BATCH_NEGATIVE_INDEX = "neg"
 BATCH_POSITIVE_INDEX = "pos"
+USE_CONVERSION = False
 
 
 class ProofExampleLoader:
@@ -359,7 +360,7 @@ class ClauseLoader:
     @staticmethod
     def add_single_file_to_proof_loader(proof_file):
         print(proof_file)
-        new_proof_loader = ProofExampleLoader(proof_file, use_conversion=False)
+        new_proof_loader = ProofExampleLoader(proof_file, use_conversion=USE_CONVERSION)
         if len(
                 new_proof_loader.get_negated_conjecture()) == 0 or new_proof_loader.get_number_of_negatives() == 0 or new_proof_loader.get_number_of_positives() == 0:
             print("Could not use this proof loader, no negatives and positives or no conjecture...")
@@ -394,6 +395,8 @@ class ClauseLoader:
 
     @staticmethod
     def initialize_proof_loader(file_list, use_conversion=False):
+        global USE_CONVERSION
+        USE_CONVERSION = use_conversion
         problems = [0, 0, 0, 0, 0]
         large_inits = 0
         easy_problems = 0
