@@ -10,8 +10,9 @@ from CNN_embedder_network import CNNEmbedder
 
 from data_augmenter import DataAugmenter, DefaultAugmenter
 from TPTP_train_val_files import *
+
 if sys.version_info[0] < 3:
-    print(" [!] ERROR: Could not import module thread. Python version "+str(sys.version_info))
+    print(" [!] ERROR: Could not import module thread. Python version " + str(sys.version_info))
     sys.exit(1)
     # from thread import start_new_thread
 else:
@@ -41,7 +42,8 @@ class ProofExampleLoader:
 
         if file_prefix is not None:
             self.pos_examples = ProofExampleLoader.read_file(file_prefix, "pos")
-            self.neg_examples = ProofExampleLoader.read_file(file_prefix, "neg")
+            self.neg_examples = ProofExampleLoader.read_file(file_prefix, "neg") + \
+                                ProofExampleLoader.read_file(file_prefix, "unp")
             self.init_clauses = ProofExampleLoader.read_file(file_prefix, "init")
 
             try:
@@ -60,18 +62,18 @@ class ProofExampleLoader:
                                 self.neg_conjecture = self.neg_conjecture + [int(i) for i in line]
                                 c += 1
                             except ValueError as e:
-                                print("[!] ERROR CONJ: "+str(e))
+                                print("[!] ERROR CONJ: " + str(e))
                                 self.neg_conjecture = last_conj
                         elif "6" not in line:
-                            print("[!] WARNING: Conjecture line without \"not\" removed: "+str(line))
+                            print("[!] WARNING: Conjecture line without \"not\" removed: " + str(line))
                         last_line = full_line
                     if len(self.neg_conjecture) == 0 and last_line is not None:
                         line = last_line.split("\n")[0].split(",")
                         if not (len(line) == 1 and line[0] == ''):
-                            print("[!] WARNING: Using last line of conjecture: "+str(line))
+                            print("[!] WARNING: Using last line of conjecture: " + str(line))
                             self.neg_conjecture = self.neg_conjecture + [int(i) for i in line]
             except IOError as e:
-                print("[!] ERROR CONJ: "+str(e))
+                print("[!] ERROR CONJ: " + str(e))
                 self.neg_conjecture = []
 
             if self.use_conversion:
@@ -79,12 +81,12 @@ class ProofExampleLoader:
                     self.analyse_vocab()
                     self.shuffle_conversion()
                 except IndexError as e:
-                    print("[!] ERROR CONVERSION: "+str(e))
+                    print("[!] ERROR CONVERSION: " + str(e))
 
     @staticmethod
     def read_file(file_prefix, file_postfix):
         all_lines = []
-        with open(file_prefix + "_"+file_postfix+".txt", "r") as f:
+        with open(file_prefix + "_" + file_postfix + ".txt", "r") as f:
             for line in f:
                 line = line.split(",")
                 if line and line[0] is not '\n':
@@ -92,7 +94,7 @@ class ProofExampleLoader:
                         line = [int(i) for i in line]
                         all_lines.append(line)
                     except ValueError as e:
-                        print("[!] ERROR "+file_postfix.upper()+": "+str(e))
+                        print("[!] ERROR " + file_postfix.upper() + ": " + str(e))
         return all_lines
 
     def permute_positives(self):
@@ -147,8 +149,10 @@ class ProofExampleLoader:
         return len(self.neg_examples)
 
     def get_average_clause_length(self):
-        pos_length = sum([len(c) for c in self.pos_examples]) / (len(self.pos_examples) if len(self.pos_examples) > 0 else 1)
-        neg_length = sum([len(c) for c in self.neg_examples]) / (len(self.neg_examples) if len(self.neg_examples) > 0 else 1)
+        pos_length = sum([len(c) for c in self.pos_examples]) / (
+        len(self.pos_examples) if len(self.pos_examples) > 0 else 1)
+        neg_length = sum([len(c) for c in self.neg_examples]) / (
+        len(self.neg_examples) if len(self.neg_examples) > 0 else 1)
         return [pos_length, neg_length]
 
     def get_greatest_clause_length(self):
@@ -168,7 +172,8 @@ class ProofExampleLoader:
         all_neg_vocabs = np.unique(np.array([c for clause in self.neg_examples for c in clause]))
         all_init_vocabs = np.unique(np.array([c for clause in self.init_clauses for c in clause]))
         all_neg_conj_vocabs = np.unique(np.array(self.neg_conjecture))
-        self.all_vocabs = list(np.unique(np.concatenate([all_pos_vocabs, all_neg_vocabs, all_init_vocabs, all_neg_conj_vocabs], axis=0)))
+        self.all_vocabs = list(
+            np.unique(np.concatenate([all_pos_vocabs, all_neg_vocabs, all_init_vocabs, all_neg_conj_vocabs], axis=0)))
 
         with open("Vocabs.txt", 'r') as vocab_file:
             base_vocab = json.load(vocab_file)
@@ -245,13 +250,13 @@ class ClauseLoader:
 
         for index in range(len(self.proof_loader)):
             self.proof_pos_indices = self.proof_pos_indices + [index for _ in range(
-                int(math.ceil(math.sqrt(self.proof_loader[index].get_number_of_positives()))**1.5))]
+                int(math.ceil(math.sqrt(self.proof_loader[index].get_number_of_positives())) ** 1.5))]
 
             self.proof_neg_indices = self.proof_neg_indices + [index for _ in range(
-                int(math.ceil(math.sqrt(self.proof_loader[index].get_number_of_negatives()))**1.5))]
+                int(math.ceil(math.sqrt(self.proof_loader[index].get_number_of_negatives())) ** 1.5))]
             print("Index " + str(index) + ": positives = " + str(
                 self.proof_loader[index].get_number_of_positives()) + ", negatives = " + str(
-                self.proof_loader[index].get_number_of_negatives()) + "( "+self.proof_loader[index].prefix+" )")
+                self.proof_loader[index].get_number_of_negatives()) + "( " + self.proof_loader[index].prefix + " )")
             # print(self.proof_loader[index].get_average_clause_length())
             # print(self.proof_loader[index].get_clause_statistic())
 
@@ -267,7 +272,8 @@ class ClauseLoader:
         for proof_file in file_list:
             print(proof_file)
             new_proof_loader = ProofExampleLoader(proof_file, use_conversion=use_conversion)
-            if len(new_proof_loader.get_negated_conjecture()) == 0 or new_proof_loader.get_number_of_negatives() == 0 or new_proof_loader.get_number_of_positives() == 0:
+            if len(
+                    new_proof_loader.get_negated_conjecture()) == 0 or new_proof_loader.get_number_of_negatives() == 0 or new_proof_loader.get_number_of_positives() == 0:
                 print("Could not use this proof loader, no negatives and positives or no conjecture...")
                 problems[0] = problems[0] + 1
             elif len(new_proof_loader.get_negated_conjecture()) > 150:
@@ -292,17 +298,17 @@ class ClauseLoader:
                 if new_proof_loader.get_number_init_clauses() > 32:
                     large_inits += 1
 
-        print("="*50)
-        print("Overall proof loader: "+str(len(proof_loader))+" | "+str(len(file_list)))
+        print("=" * 50)
+        print("Overall proof loader: " + str(len(proof_loader)) + " | " + str(len(file_list)))
         print("Found following problems:")
-        print("No neg/pos/neg_conj: "+str(problems[0]))
-        print("Too large neg_conj: "+str(problems[1]))
-        print("No init clauses: "+str(problems[2]))
-        print("Too many init clauses: "+str(problems[3]))
-        print("Too many positive clauses: "+str(problems[4]))
-        print("Too less negatives: "+str(easy_problems))
-        print("More init clauses than 32: "+str(large_inits))
-        print("="*50)
+        print("No neg/pos/neg_conj: " + str(problems[0]))
+        print("Too large neg_conj: " + str(problems[1]))
+        print("No init clauses: " + str(problems[2]))
+        print("Too many init clauses: " + str(problems[3]))
+        print("Too many positive clauses: " + str(problems[4]))
+        print("Too less negatives: " + str(easy_problems))
+        print("More init clauses than 32: " + str(large_inits))
+        print("=" * 50)
 
         return proof_loader
 
@@ -393,19 +399,19 @@ class ClauseLoader:
             greatest_pos_len = max(greatest_pos_len, curr_greatest[0])
             greatest_neg_len = max(greatest_neg_len, curr_greatest[1])
             no_neg_conj += 1 if len(loader.get_negated_conjecture()) == 0 else 0
-        print("="*50+"\nSTATISTICS")
-        print("Negative: "+str(overall_neg))
-        print("Average length: "+str(avg_neg_len))
-        print("Greatest: "+str(greatest_neg_len))
-        print("Positive: "+str(overall_pos))
-        print("Average length: "+str(avg_pos_len))
-        print("Greatest: "+str(greatest_pos_len))
-        print("Without Negated Conjecture: "+str(no_neg_conj))
+        print("=" * 50 + "\nSTATISTICS")
+        print("Negative: " + str(overall_neg))
+        print("Average length: " + str(avg_neg_len))
+        print("Greatest: " + str(greatest_neg_len))
+        print("Positive: " + str(overall_pos))
+        print("Average length: " + str(avg_pos_len))
+        print("Greatest: " + str(greatest_pos_len))
+        print("Without Negated Conjecture: " + str(no_neg_conj))
 
     @staticmethod
     def create_file_list_from_dir(directory):
         all_files = sorted(glob(directory + "*_neg.txt"))
-        print("Found "+str(len(all_files))+" files in "+directory)
+        print("Found " + str(len(all_files)) + " files in " + directory)
         return [f.rsplit('_', 1)[0] for f in all_files]
 
 
@@ -417,8 +423,10 @@ class ClauseLoader:
 
 
 if __name__ == "__main__":
-    train_loader = ClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_", get_TPTP_train_files(Dataset.Best)))
-    val_loader = ClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_", get_TPTP_test_files(Dataset.Best)))
+    train_loader = ClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_",
+                                                         get_TPTP_train_files(Dataset.Best)))
+    val_loader = ClauseLoader(convert_to_absolute_path("/home/phillip/datasets/Cluster/Training/ClauseWeight_",
+                                                       get_TPTP_test_files(Dataset.Best)))
     all_proof_loader = train_loader.proof_loader + val_loader.proof_loader
     overall_vocab_use = dict()
     for loader in all_proof_loader:
@@ -429,6 +437,6 @@ if __name__ == "__main__":
             else:
                 overall_vocab_use[k] = v
             if v > 100:
-                print("Found greater 100 ("+loader.prefix+")")
-    print("Number of loaders: "+str(len(all_proof_loader)))
-    print("Overall vocab dict: "+str(overall_vocab_use))
+                print("Found greater 100 (" + loader.prefix + ")")
+    print("Number of loaders: " + str(len(all_proof_loader)))
+    print("Overall vocab dict: " + str(overall_vocab_use))

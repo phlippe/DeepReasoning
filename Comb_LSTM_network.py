@@ -56,7 +56,7 @@ class CombLSTMNetwork:
     def forward(self):
         with tf.variable_scope(self.name):
             self.labels = tf.placeholder(dtype="float32", shape=[self.batch_size], name="Labels")
-            self.is_training = tf.placeholder_with_default(True, shape=())
+            self.is_training = tf.placeholder_with_default(True, shape=()) # TODO: Change back to True!
 
             self.embed_clauses()
             self.embed_neg_conjecture()
@@ -85,6 +85,7 @@ class CombLSTMNetwork:
             self.weight = fully_connected(input_=layer_initial_dropout, outputs=1, activation_fn=tf.nn.sigmoid,
                                           reuse=False, name=FC_LAYER_3, use_batch_norm=False)
             self.weight = tf.squeeze(self.weight, name="CalcWeights")
+            self.weight = tf.add(self.weight, 0, name="FinalWeights")
             if self.tensor_height != 1:
                 self.weight = tf.reshape(tensor=self.weight, shape=[-1], name="ReshapeTo1D")
             self.loss, self.loss_ones, self.loss_zeros, self.all_losses = weighted_BCE_loss(self.weight, self.labels,
@@ -92,14 +93,14 @@ class CombLSTMNetwork:
             self.loss_regularization = weight_decay_loss()
             self.loss += self.loss_regularization
 
-            with tf.name_scope("SummaryVisu"):
-                self.add_feature_visualizations([(self.neg_conj_embedded[0, :], "FeatureNegConj")])
-                self.add_feature_visualizations([(self.train_clauses, "FeaturesClause"),
-                                                 (layer_comb, "FeaturesCombClauseNegConj"),
-                                                 (layer_initial, "FeaturesCombInitialMemory"),
-                                                 (shaped_state, "FeaturesState")],
-                                                indices=[(self.num_init_clauses, "Positive"),
-                                                         (self.num_init_clauses+self.num_train_clauses/2, "Negative")])
+            # with tf.name_scope("SummaryVisu"):
+            #     self.add_feature_visualizations([(self.neg_conj_embedded[0, :], "FeatureNegConj")])
+            #     self.add_feature_visualizations([(self.train_clauses, "FeaturesClause"),
+            #                                      (layer_comb, "FeaturesCombClauseNegConj"),
+            #                                      (layer_initial, "FeaturesCombInitialMemory"),
+            #                                      (shaped_state, "FeaturesState")],
+            #                                     indices=[(self.num_init_clauses, "Positive"),
+            #                                              (self.num_init_clauses+self.num_train_clauses/2, "Negative")])
 
     def add_feature_visualizations(self, feature_tensor_tuples, scale_size=32, indices=None):
         if indices is None:
@@ -242,6 +243,10 @@ class CombLSTMNetwork:
                         all_states.append(self.state_lstm_initial)
 
                     self.state_lstm_initial = self.extract_states(all_states)
+
+                with tf.name_scope("FinalState"):
+                    if self.num_proof == 1:
+                        tmp = tf.squeeze(self.state_lstm_initial[0], name="InitStateFeatures")
                     # lstm_variables = tf.get_collection(tf.GraphKeys.VARIABLES, scope=vs.name)
                     # self.state_lstm_initial = tf.Print(self.state_lstm_initial,
                     #                                    [tf.reduce_max(lstm_var) for lstm_var in lstm_variables],
@@ -275,6 +280,7 @@ class CombLSTMNetwork:
         return tf.squeeze(comb_layer)
 
     def embed_neg_conjecture(self):
+        print("Dropout: "+str(self.dropout_rate_embedder))
         self.neg_conjecture_embedder = CNNEmbedder(embedding_size=self.embedding_size, name="NegConjectureEmbedder",
                                                    reuse_vocab=True, batch_size=self.num_proof, char_number=None,
                                                    net_type=self.embedding_net_type, tensor_height=1,
@@ -283,13 +289,15 @@ class CombLSTMNetwork:
                                                    is_training=self.is_training, use_conversion=self.use_conversion)
         # Squeeze so that LSTMs can run with fully connected layers
         self.neg_conj_embedded = tf.squeeze(self.neg_conjecture_embedder.embedded_vector)
+        if self.num_proof == 1:
+            self.neg_conj_embedded = tf.expand_dims(self.neg_conj_embedded, axis=0, name="NegConjFeatures")
 
     @staticmethod
     def create_shuffle_tensor(num_init_clauses):
         shuffle_matrix = [list(range(num_init_clauses)) for _ in range(num_init_clauses)]
         for i in range(num_init_clauses):
             a = shuffle_matrix[i][:i + 1]
-            shuffle(a)
+            # shuffle(a)
             shuffle_matrix[i][:i + 1] = a
         return shuffle_matrix
 

@@ -88,7 +88,7 @@ class CombLSTMInterference:
             shaped_state = tf.nn.tanh(shaped_state, name="StateActivationFct")
             shaped_state = tf.tile(tf.expand_dims(shaped_state, axis=0), multiples=[self.num_train_clauses, 1])
             tensor_with_state = tf.concat(values=[layer_comb, shaped_state], axis=1)
-            tensor_with_state = tf.reshape(tensor_with_state, shape=[self.batch_size, 1, 1, self.comb_features*2])
+            tensor_with_state = tf.reshape(tensor_with_state, shape=[self.num_train_clauses, 1, 1, self.comb_features*2])
 
             layer_initial = fully_connected(input_=tensor_with_state, outputs=self.comb_features,
                                             activation_fn=tf.nn.relu, reuse=False, name=FC_LAYER_2,

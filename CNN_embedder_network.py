@@ -73,8 +73,9 @@ class CNNEmbedder:
                                                name="InputClause")
             self.input_length = tf.placeholder(dtype="int32",
                                                shape=[self.batch_size], name="InputClauseLength")
-
+            # self.input_clause = tf.Print(self.input_clause, [self.input_clause, self.input_length], message="Input: ", summarize=8)
             embedded_vocabs = self.embed_input_clause()
+            # embedded_vocabs = tf.Print(embedded_vocabs, [embedded_vocabs], message="Vocabs: ", summarize=8)
             if IS_OLD_TENSORFLOW:
                 input_tensor = tf.pack(
                     values=tf.split(value=embedded_vocabs, num_split=self.batch_size * self.tensor_height, split_dim=0),
@@ -170,8 +171,10 @@ class CNNEmbedder:
 
     def embed_input_clause(self):
         all_vocabs = tf.reshape(tensor=self.input_clause, shape=[-1])
+        # self.vocab_index_tensor = tf.Print(self.vocab_index_tensor, [self.vocab_index_tensor], message="Index tensor: ", summarize=8)
         vocab_indices = tf.gather(self.vocab_index_tensor, all_vocabs + self.vocab_offset)
         arity_indices = tf.gather(self.arity_index_tensor, all_vocabs)
+        # vocab_indices = tf.Print(vocab_indices, [vocab_indices, arity_indices], message="Indices: ", summarize=8)
         embedded_vocabs = tf.nn.embedding_lookup(params=self.vocab_table, ids=vocab_indices, name="Vocab_Lookup")
         embedded_arities = tf.nn.embedding_lookup(params=self.arity_table, ids=arity_indices, name="Arity_Lookup")
         return tf.concat([embedded_vocabs, embedded_arities], axis=1)
@@ -250,6 +253,7 @@ class CNNEmbedder:
                                 dtype=np.int32)  # -1 If unknown fun_code is given, -1 raises an error
         for i in range(len(fun_codes)):
             index_values[fun_codes[i]] = i
+        print("Indices: "+str(np.where(index_values == 0)))
 
         return tf.constant(index_values, dtype=tf.int32, name="Index_Vector"), tf.constant(fun_codes_offset,
                                                                                            dtype=tf.int32,
@@ -276,6 +280,8 @@ class CNNEmbedder:
             keys = list(keys)
         values_offset = - min(values)
         values = [values[i] + values_offset for i in range(len(values))]  # All greater than 0
+        values, keys = (list(t) for t in zip(*sorted(zip(values, keys))))
+        print("Vocab values: "+str(values)+", Keys: "+str(keys[:10]))
         return values, keys, values_offset
 
     @staticmethod

@@ -16,8 +16,8 @@ def get_vocab_variable(name, shape, scale_factor=1e-3):
             return scale_factor*tf.reduce_mean(tf.pow(weights, 2) / 2.0)
     vocab = tf.get_variable(name,
                             initializer=tf.random_uniform(shape=shape,
-                                                          minval=-1.0,
-                                                          maxval=1.0,
+                                                          minval=-0.0,  # -1.0
+                                                          maxval=0.0,   # 1.0
                                                           dtype=tf.float32),
                             regularizer=vocab_regularization,
                             trainable=True,
@@ -234,6 +234,7 @@ def dilated_dense_block(input_tensor, layer_number, kernel_size=3, channel_size=
         end_channels = channel_size
     all_layers = [input_tensor]
     output_tensor = input_tensor
+    # output_tensor = tf.Print(output_tensor, [output_tensor], message="DilatedInput", summarize=8)
     with tf.variable_scope(name):
         for layer_index in range(layer_number):
             with tf.name_scope("DilConv"+str(layer_index)):
@@ -243,12 +244,14 @@ def dilated_dense_block(input_tensor, layer_number, kernel_size=3, channel_size=
                                                       reuse=reuse),
                                   name="RELU_"+str(layer_index)
                             )
+                # layer_out = tf.Print(layer_out, [layer_out], "DilConv"+str(layer_index), summarize=8)
                 layer_out = dropout(layer_out, dropout_rate, training)
             all_layers.append(layer_out)
             with tf.name_scope("FeatureReduction_"+str(layer_index)):
                 output_tensor = tf.nn.relu(conv1d(input_=tf.concat(values=all_layers, axis=3, name="FeatureConcat"+str(layer_index)), kernel_size=1,
                                                   output_dim=channel_size if layer_index + 1 < layer_number else end_channels,
                                                   name="FeatureReduction_"+str(layer_index), reuse=reuse), name="RELU_"+str(layer_index))
+                # output_tensor = tf.Print(output_tensor, [output_tensor], "FeatureRed"+str(layer_index), summarize=8)
                 output_tensor = dropout(output_tensor, dropout_rate, training)
     return output_tensor
 
@@ -261,7 +264,11 @@ def dropout(input_, p, training=False):
     :param training: Whether the network is training or testing
     :return: Input with applied dropout
     """
-    return tf.layers.dropout(inputs=input_, rate=p, training=training)
+    if training == False or p == 0.0:
+        return input_
+    else:
+        print("DROPOUT GREATER THAN 0!")
+        return tf.layers.dropout(inputs=input_, rate=p, training=training)
 
 
 def fully_connected(input_, outputs, activation_fn=tf.nn.relu, reuse=False, name="FC_Layer", use_batch_norm=False):
@@ -354,6 +361,21 @@ def freeze_graph(model_folder, output_node_names, sess, file_name="frozen_model.
     with tf.gfile.GFile(output_graph, "wb") as f:
         f.write(output_graph_def.SerializeToString())
     print("%d ops in the final graph." % len(output_graph_def.node))
+
+
+def load_frozen_graph(frozen_graph_filename):
+    # We load the protobuf file from the disk and parse it to retrieve the
+    # unserialized graph_def
+    with tf.gfile.GFile(frozen_graph_filename, "rb") as f:
+        graph_def = tf.GraphDef()
+        graph_def.ParseFromString(f.read())
+
+    # Then, we import the graph_def into a new Graph and returns it
+    with tf.Graph().as_default() as graph:
+        # The name var will prefix every op/nodes in your graph
+        # Since we load everything in a new graph, this is not needed
+        tf.import_graph_def(graph_def, name="prefix")
+    return graph
 
 
 def weighted_BCE_loss(predictions, labels, weight0=1, weight1=1):
